@@ -1,229 +1,403 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using OpenTK.Graphics.OpenGL;
-using OpenTK;
+﻿using System.Diagnostics;
+using GPR202_A3.Debugging;
+using GPR202_A3.Graphics;
+using GPR202_A3.Scene;
+using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
-using System.Diagnostics;
-using System.Reflection;
-using StbImageSharp;
-using System.Reflection.Metadata;
-using System.IO;
 using OpenTK.Windowing.GraphicsLibraryFramework;
-using OpenTK.Input;
-using static System.Net.Mime.MediaTypeNames;
-using OpenTK.Windowing.Common.Input;
-using System.Text.RegularExpressions;
-using GPR_Command;
 
-namespace GPR202_Assessment3
+namespace GPR202_A3
 {
-    public class Game : GameWindow
+    /// <summary>
+    /// The game window: loads the scene, runs the game logic in OnUpdateFrame and draws it in OnRenderFrame.
+    ///
+    /// Balloon Hunt: fly the plane with the mouse and collect every balloon hidden around the landscape.
+    /// </summary>
+    internal class Game : GameWindow
     {
-        private Stopwatch timer;
-        private int[] viewport = new int[4];
-        
-        Camera cam;
-        Skybox skybox;
-        Plane plane;
-        Terrain terrain;
-        Balloon balloon;
+        #region Constants
+        // How many balloons each game starts with
+        private const int BALLOONSTOTAL = 8;
 
-        public const int balloons_total = 8;
-        public int balloons_left = balloons_total;
-        public List<BalloonState> m_balloons;
+        // How high above the centre of the terrain the plane starts, in units
+        private const float STARTHEIGHT = 60f;
+        #endregion
 
-        public Game() : base(GameWindowSettings.Default, NativeWindowSettings.Default)
+        #region Private Fields
+        // Window size in screen coordinates (the same space as the mouse position)
+        private int _width;
+        private int _height;
+
+        // Title of the game
+        private readonly string _title;
+
+        // Render pipeline
+        private ShaderProgram? _modelShader;
+        private bool _useBackfaceCulling = true;
+        private bool _useLighting = true;
+        private bool _useVSync = true;
+
+        // Debug view: what the shaders output to the screen (texture, normals, UVs, wireframe, metallic, roughness)
+        private static readonly int DebugViewCount = Enum.GetValues<DebugView>().Length;
+        private DebugView _debugView;
+
+        // Frame timing readout (frame time, CPU render time and GPU render time)
+        private readonly FrameTimer _frameTimer = new();
+
+        // How long OnLoad took, shown on screen to compare optimisations
+        private double _loadMs;
+
+        // Scene
+        private Camera? _camera;
+        private Skybox? _skybox;
+        private Terrain? _terrain;
+        private Plane? _plane;
+        private Balloon? _balloonModel;
+
+        // Game state
+        private readonly List<BalloonState> _balloons = new();
+        private int _balloonsLeft;
+        #endregion
+
+        #region Constructors
+        /// <summary>
+        /// Constructor that sets up the window.
+        /// </summary>
+        /// <param name="width">The window's width.</param>
+        /// <param name="height">The window's height.</param>
+        /// <param name="title">The window's title.</param>
+        public Game(int width, int height, string title)
+            : base(GameWindowSettings.Default, NativeWindowSettings.Default)
         {
-            this.CenterWindow(new Vector2i(1280, 720));
-        }
+            _width = width;
+            _height = height;
+            _title = title;
 
+            Title = _title;
+            CenterWindow(new Vector2i(_width, _height));
+        }
+        #endregion
+
+        #region OpenGL Overrides
+        /// <summary>
+        /// Creates every GPU resource and starts the first game.
+        /// </summary>
         protected override void OnLoad()
         {
-            timer = new Stopwatch();
-            timer.Start();
+            base.OnLoad();
+            var loadTimer = Stopwatch.StartNew();
 
-            // OpenGL Setup
-            GL.Enable(EnableCap.DepthTest);
+            // --- Debugging Setup ---
+            DebugText.Initialize(_width, _height);
+            DebugText.TextScale = 1.4f;
+            _frameTimer.Initialize();
+
+            // --- Render state ---
             GL.ClearColor(new Color4(0.3f, 0.4f, 0.5f, 1f));
+            GL.Enable(EnableCap.DepthTest);
+            if (_useBackfaceCulling)
+                GL.Enable(EnableCap.CullFace);
+            // Front faces are wound counter-clockwise (OpenGL's default, and what Blender exports)
+            GL.FrontFace(FrontFaceDirection.Ccw);
+            VSync = VSyncMode.On;
 
-            GL.GetInteger(GetPName.Viewport, viewport);
-            Console.WriteLine(viewport[0] + ", " + viewport[1] + ", " + viewport[2] + ", " + viewport[3]);
+            // --- Model shader and the uniforms that never change ---
+            // Uniforms keep their value until changed, so values that stay the same for the whole run are uploaded once.
+            _modelShader = new ShaderProgram("Model.vert", "Model.frag");
+            _modelShader.Bind();
+            _modelShader.SetVector3("lightDir", new Vector3(-0.4f, -1f, -0.3f)); // sun from above, a little to one side
+            _modelShader.SetVector3("lightColor", new Vector3(1f, 0.97f, 0.9f)); // warm daylight
+            _modelShader.SetFloat("ambientStrength", 0.5f);
+            _modelShader.SetInt("AlbedoMap", Material.ALBEDOMAPUNIT);
+            _modelShader.SetInt("NormalMap", Material.NORMALMAPUNIT);
+            _modelShader.SetInt("MetallicMap", Material.METALLICMAPUNIT);
+            _modelShader.SetInt("RoughnessMap", Material.ROUGHNESSMAPUNIT);
+            _modelShader.SetInt("SkyboxMap", Skybox.CUBEMAPUNIT);
 
-            // Load Game Resources
-            cam = new Camera(Vector3.UnitZ * 3, (float)viewport[2], (float)viewport[3]);
-            skybox = new Skybox();
-            plane = new Plane();
-            terrain = new Terrain();
-            balloon = new Balloon();
+            // --- Scene ---
+            // Six faces in OpenGL's cube map order: +X, -X, +Y, -Y, +Z, -Z
+            _skybox = new Skybox(["Skybox/right.jpg", "Skybox/left.jpg", "Skybox/top.jpg",
+                                  "Skybox/bottom.jpg", "Skybox/front.jpg", "Skybox/back.jpg"]);
+            _terrain = new Terrain(); // before anything that is placed on the terrain
+            _plane = new Plane(GetStartPosition());
+            _balloonModel = new Balloon();
 
-            // Start a New Game
+            // --- Camera ---
+            _camera = new Camera(_width, _height);
+            UploadProjection();
+            CursorState = CursorState.Grabbed; // hide the cursor and keep it in the window
+
+            // --- Start a new game ---
             SetupNewGame();
 
-
-            base.OnLoad();
+            loadTimer.Stop();
+            _loadMs = loadTimer.Elapsed.TotalMilliseconds;
+            Console.WriteLine($"Load time: {_loadMs:0} ms");
+            DebugText.CheckGLError("OnLoad");
         }
 
-        private void SetupNewGame()
-        {
-            balloons_left = balloons_total;
-            m_balloons = new List<BalloonState>();
-            for (int i = 0; i < balloons_left; i++)
-            {
-                BalloonState newballoon = new BalloonState();
-                newballoon.Spawn();
-                m_balloons.Add(newballoon);
-                //Console.WriteLine("Balloon spawned at: " + newballoon.position.ToString());
-            }
-        }
-
+        /// <summary>
+        /// Frees every GPU resource.
+        /// </summary>
         protected override void OnUnload()
         {
-            timer.Stop();
-
             base.OnUnload();
+
+            _plane?.Delete();
+            _balloonModel?.Delete();
+            _terrain?.Delete();
+            _skybox?.Delete();
+            Material.DeleteDefaults();
+            _modelShader?.Delete();
+            _frameTimer.Delete();
+            DebugText.Shutdown();
         }
 
+        /// <summary>
+        /// Keeps the camera's aspect ratio and the debug text layout in step with the window size.
+        /// </summary>
         protected override void OnResize(ResizeEventArgs e)
         {
-            GL.Viewport(0, 0, e.Width, e.Height);
-            viewport[2] = e.Width;
-            viewport[3] = e.Height;
             base.OnResize(e);
+
+            // Window size in screen coordinates. On a Retina/HiDPI display this is smaller than the framebuffer
+            // (in pixels), which is why the viewport is set in OnFramebufferResize instead.
+            _width = e.Width;
+            _height = e.Height;
+
+            _camera?.SetScreenSize(_width, _height);
+            UploadProjection();
+            DebugText.SetScreenSize(_width, _height);
         }
 
+        /// <summary>
+        /// Sets the viewport to the framebuffer's size in pixels (which differs from the window size on Retina displays).
+        /// </summary>
+        protected override void OnFramebufferResize(FramebufferResizeEventArgs e)
+        {
+            base.OnFramebufferResize(e);
+            GL.Viewport(0, 0, e.Width, e.Height);
+        }
 
+        /// <summary>
+        /// Game logic: input, the plane, the balloons and the camera.
+        /// </summary>
         protected override void OnUpdateFrame(FrameEventArgs args)
         {
-            Title = $"GPR2 Balloon Hunt!         Remaining: {balloons_left}         FPS: {1f / args.Time:0}";
-
             base.OnUpdateFrame(args);
 
-            if (!IsFocused) // check to see if the window is focused
+            // Seconds since the last update, which keeps movement frame-rate independent
+            float deltaTime = (float)args.Time;
+            DebugText.Update(deltaTime);
+
+            KeyboardState kb = KeyboardState;
+            if (kb.IsKeyPressed(Keys.Escape))
             {
+                Close();
                 return;
             }
 
-            float deltatime = (float)args.Time;
+            HandleDebugKeys(kb);
+            ShowDebugReadouts();
 
-            HandleInput(deltatime);
+            // Pause the game while the window isn't focused (the cursor is elsewhere)
+            if (!IsFocused || _plane == null || _camera == null)
+                return;
 
-            plane.OnFrameUpdate(this.MouseState, viewport[2], viewport[3], deltatime);
-
-            // Plane can collect Balloons!
-            for (int i = 0; i < m_balloons.Count; i++)
-            {
-                bool collected = m_balloons[i].collected;
-                if (m_balloons[i].Update(plane.position, deltatime))
-                {
-                    // Destroy balloon.
-                } 
-                else
-                {
-                    if (m_balloons[i].collected != collected)
-                    {
-                        balloons_left--;
-                        Console.WriteLine("Balloon Collected! " + balloons_left + " remaining.");
-                    }
-                }
-            }
-            
+            _plane.Update(MouseState, _width, _height, deltaTime);
+            UpdateBalloons(deltaTime);
+            _camera.Follow(_plane.Position, _plane.Forward, deltaTime);
         }
 
-        private bool firstMove = true;
-        private Vector2 lastPos;
-        private void HandleInput(float deltaT)
-        {
-            // Keyboard
-            KeyboardState keyboard = KeyboardState;
-            if (keyboard.IsKeyDown(Keys.Escape))
-                Close();
-
-            // Mouse
-            MouseState mouse = this.MouseState;
-            if (firstMove) // this bool variable is initially set to true
-            {
-                lastPos = new Vector2(mouse.X, mouse.Y);
-                firstMove = false;
-            }
-            else
-            {
-                float TurnFactor = ((1.0f / viewport[2]) * mouse.X);
-                float TurnFactorN;
-                float midPoint = 0.5f;
-                if (TurnFactor > 0.5f)
-                {
-                    TurnFactor = 1 - TurnFactor;
-                    TurnFactorN = (1 - ((TurnFactor - ((1 - TurnFactor) * TurnFactor)) * (1 / (1 - midPoint))));
-                }
-                else
-                {
-                    TurnFactorN = (TurnFactor - ((1 - TurnFactor) * TurnFactor)) * (1 / midPoint);
-                }
-
-                float deltaX = ((TurnFactorN - 0.5f) * 2f) * 0.1f;
-
-                //Apply yaw rotation to camera and plane together
-                cam.Yaw -= deltaX * 1f * plane.TurnSpeed * deltaT;
-                plane.Yaw -= deltaX * -1f * plane.TurnSpeed * deltaT;
-            }
-        }
-
-        protected override void OnMouseMove(MouseMoveEventArgs e)
-        {
-            base.OnMouseMove(e);
-        }
-
+        /// <summary>
+        /// Draws the scene: opaque models first, then the terrain, then the sky, then the debug text on top.
+        /// </summary>
         protected override void OnRenderFrame(FrameEventArgs args)
         {
+            // Time the work this frame issues (stopped before SwapBuffers, which is where VSync waits)
+            _frameTimer.BeginFrame();
+
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            // update the uniform color
-            double timeValue = timer.Elapsed.TotalSeconds;
+            if (_modelShader != null && _camera != null)
+            {
+                Matrix4 view = _camera.GetViewMatrix(); // shared by every shader this frame
 
-            // Setup camera position and rotation
-            Vector3 cam_pos = new Vector3(0f, 0f, 0f);
-            Vector3 cam_dir = new Vector3(cam.Yaw, 20.0f, 0.0f);
-            float distance = 11.0f;
-            cam_pos.X = (float)(distance * -Math.Sin(cam_dir.X * (Math.PI / 180)) * Math.Cos((cam_dir.Y) * (Math.PI / 180)));
-            cam_pos.Y = (float)(distance * -Math.Sin((cam_dir.Y) * (Math.PI / 180)));
-            cam_pos.Z = (float)(-distance * Math.Cos((cam_dir.X) * (Math.PI / 180)) * Math.Cos((cam_dir.Y) * (Math.PI / 180)));
-            Matrix4 view = Matrix4.LookAt(plane.GetPosition() - cam_pos, plane.GetPosition(), new Vector3(0f, 1f, 0f));
+                // Wireframe: rasterise only the triangle edges
+                if (_debugView == DebugView.Wireframe)
+                    GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
 
-            // Rotate & Move Plane
-            //float rotY = MathHelper.DegreesToRadians(90.0f);
-            float rotY = (float)MathHelper.DegreesToRadians(180.0f + cam.Yaw);
-            plane.SetRotation(new Vector3(0f, rotY, 0f));
-            plane.UpdateVertices();
-            plane.position -= Vector3.Normalize(plane.Right) * plane.FlySpeed * (float)args.Time;
+                // --- Models (plane and balloons) ---
+                // Only what can change between frames is uploaded here: the camera and the debug toggles
+                _modelShader.Bind();
+                _modelShader.SetMatrix4("view", view);
+                _modelShader.SetVector3("cameraPos", _camera.Position);
+                _modelShader.SetInt("DebugView", (int)_debugView);
+                _modelShader.SetInt("UseLighting", _useLighting ? 1 : 0);
 
+                Material.ResetLastApplied();
+                _plane?.Render(_modelShader);
+                if (_balloonModel != null)
+                {
+                    foreach (var balloon in _balloons)
+                        _balloonModel.Render(_modelShader, balloon);
+                }
 
-            // Skybox
-            Matrix4 proj = cam.GetProjectionMatrix();
-            GL.DepthFunc(DepthFunction.Lequal);
-            skybox.Draw(view, proj);
-            GL.DepthFunc(DepthFunction.Less);
+                // --- Terrain ---
+                // Drawn after the small models, so the depth test skips terrain pixels hidden behind them
+                _terrain?.Render(view, _debugView);
 
+                // Back to filled polygons, so the sky and debug text aren't drawn as lines
+                GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
 
-            // Draw Plane
-            plane.Draw(view, proj, cam);
+                // --- Skybox ---
+                // Drawn last at the far plane: pixels already covered by the scene fail the depth test,
+                // so the cube map is only sampled where the sky is actually visible
+                _skybox?.Render(view);
+            }
 
-            // Draw Balloons
-            for (int i = 0; i < m_balloons.Count; i++)
-                balloon.Draw(m_balloons[i].position, m_balloons[i].rotation, m_balloons[i].scale, view, proj);
+            DebugText.Render();
 
-            // Draw Landscape
-            terrain.Draw(view, proj);
-
-
-
-            // Finalise Frame
-            this.Context.SwapBuffers();
+            _frameTimer.EndFrame(args.Time);
+            Context.SwapBuffers();
             base.OnRenderFrame(args);
         }
+        #endregion
+
+        #region Helper Methods
+        /// <summary>
+        /// Resets the balloons and the plane for a new game.
+        /// </summary>
+        private void SetupNewGame()
+        {
+            _balloons.Clear();
+            for (int i = 0; i < BALLOONSTOTAL; i++)
+            {
+                var balloon = new BalloonState();
+                balloon.Spawn();
+                _balloons.Add(balloon);
+            }
+
+            _balloonsLeft = BALLOONSTOTAL;
+            UpdateTitle();
+
+            _plane?.Reset(GetStartPosition(), 0f);
+            if (_plane != null)
+                _camera?.SnapTo(_plane.Position, _plane.Forward);
+        }
+
+        /// <summary>
+        /// Updates every balloon, counts newly collected ones, and removes those whose animation has finished.
+        /// </summary>
+        private void UpdateBalloons(float deltaTime)
+        {
+            if (_plane == null)
+                return;
+
+            // Backwards so removing doesn't skip entries
+            for (int i = _balloons.Count - 1; i >= 0; i--)
+            {
+                BalloonState balloon = _balloons[i];
+                bool wasCollected = balloon.Collected;
+
+                balloon.Update(_plane.Position, deltaTime);
+
+                if (!wasCollected && balloon.Collected)
+                {
+                    _balloonsLeft--;
+                    UpdateTitle();
+                    DebugText.Log($"Balloon collected! {_balloonsLeft} remaining.", Color4.Yellow, 3f);
+                }
+
+                // The original left finished balloons in the list and kept drawing them at scale 0
+                if (balloon.Finished)
+                    _balloons.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
+        /// The plane's starting point: above the middle of the terrain.
+        /// </summary>
+        private static Vector3 GetStartPosition() =>
+            Terrain.WorldPositionFromHeightMap(Terrain.Width / 2, Terrain.Length / 2) + Vector3.UnitY * STARTHEIGHT;
+
+        /// <summary>
+        /// Debug toggles on the function keys, so the gameplay keys stay free.
+        /// </summary>
+        private void HandleDebugKeys(KeyboardState kb)
+        {
+            // F1: cycle the debug view (texture - normals - UVs - wireframe - metallic - roughness)
+            if (kb.IsKeyPressed(Keys.F1))
+                _debugView = (DebugView)(((int)_debugView + 1) % DebugViewCount);
+
+            // F2: lighting on/off
+            if (kb.IsKeyPressed(Keys.F2))
+                _useLighting = !_useLighting;
+
+            // F3: backface culling on/off
+            if (kb.IsKeyPressed(Keys.F3))
+            {
+                _useBackfaceCulling = !_useBackfaceCulling;
+                if (_useBackfaceCulling)
+                    GL.Enable(EnableCap.CullFace);
+                else
+                    GL.Disable(EnableCap.CullFace);
+            }
+
+            // F4: VSync on/off. Off shows the real frame rate, for measuring optimisations.
+            if (kb.IsKeyPressed(Keys.F4))
+            {
+                _useVSync = !_useVSync;
+                VSync = _useVSync ? VSyncMode.On : VSyncMode.Off;
+            }
+        }
+
+        /// <summary>
+        /// Keyed debug lines, updated in place every frame.
+        /// </summary>
+        private void ShowDebugReadouts()
+        {
+            DebugText.Log($"Frame: {_frameTimer.AverageFrameMs:0.0} ms ({_frameTimer.AverageFps:0} FPS), " +
+                          $"CPU: {_frameTimer.AverageRenderMs:0.00} ms, GPU: {_frameTimer.AverageGpuMs:0.00} ms",
+                Color4.White, 0.5f, key: 1);
+            DebugText.Log($"Load: {_loadMs:0} ms", Color4.White, 0.5f, key: 2);
+            DebugText.Log($"Balloons remaining: {_balloonsLeft}", Color4.DarkGreen, 0.5f, key: 3);
+            DebugText.Log($"F1 Debug View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
+                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}  Esc: Quit",
+                Color4.DarkMagenta, 0.5f, key: 4);
+        }
+
+        /// <summary>
+        /// Shows the balloons left in the window title (as the original did), only when the count changes.
+        /// </summary>
+        private void UpdateTitle() => Title = $"{_title}  -  Balloons remaining: {_balloonsLeft}";
+
+        /// <summary>
+        /// Uploads the camera's projection matrix to every shader that uses it. Called on load and on resize.
+        /// </summary>
+        private void UploadProjection()
+        {
+            if (_camera == null)
+                return;
+
+            Matrix4 projection = _camera.GetProjectionMatrix();
+
+            if (_modelShader != null)
+            {
+                _modelShader.Bind();
+                _modelShader.SetMatrix4("projection", projection);
+            }
+
+            _terrain?.SetProjection(projection);
+            _skybox?.SetProjection(projection);
+        }
+
+        /// <summary>
+        /// "ON" or "OFF" for the debug readout.
+        /// </summary>
+        private static string OnOff(bool value) => value ? "ON" : "OFF";
+        #endregion
     }
 }

@@ -1,6 +1,6 @@
 # Blender 4.5.3 LTS
 # www.blender.org
-mtllib plane.mtl
+mtllib Plane.mtl
 o P-51_Mustang
 v -4.303187 0.041248 -0.371515
 v -4.302471 0.043939 -0.705862
