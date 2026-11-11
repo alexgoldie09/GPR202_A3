@@ -32,6 +32,14 @@ namespace GPR202_A3.Debugging
         ];
         #endregion
 
+        #region Message Durations
+        // How long messages stay on screen, in seconds. Used by every Log call in the project.
+        public const float READOUTDURATION = 0.5f; // keyed readouts that are re-logged every update (FPS, controls)
+        public const float EVENTDURATION = 3f; // gameplay events (e.g. a balloon collected)
+        public const float INFODURATION = 6f; // load-time information (files loaded, mesh sizes)
+        public const float WARNINGDURATION = 10f; // warnings and errors
+        #endregion
+
         #region Settings
         /// <summary>
         /// Text size multiplier. 1 = the font's native 16px. Whole numbers keep pixels crisp.
@@ -55,8 +63,15 @@ namespace GPR202_A3.Debugging
         private static int _vbo;
 
         // Vertex layout: position (x, y), uv (u, v), colour (r, g, b, a)
-        private static int _floatsPerVertex = 8;
-        private static float[] _vertexData = new float[1024]; // reused every frame, grows if needed
+        private const int POSITIONLOCATION = 0;
+        private const int UVLOCATION = 1;
+        private const int COLORLOCATION = 2;
+        private const int POSITIONSIZE = 2;
+        private const int UVSIZE = 2;
+        private const int COLORSIZE = 4;
+        private static int _floatsPerVertex = POSITIONSIZE + UVSIZE + COLORSIZE;
+        private const int VERTICESPERGLYPH = 6; // two triangles per character
+        private static float[] _vertexData = new float[1024]; // starting size; reused every frame, and grows if needed
         private static int _floatCount;
 
         // Window size in screen coordinates (not framebuffer pixels)
@@ -80,12 +95,15 @@ namespace GPR202_A3.Debugging
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
 
             int stride = _floatsPerVertex * sizeof(float);
-            GL.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, stride, 0);                 // position
-            GL.EnableVertexAttribArray(0);
-            GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, stride, 2 * sizeof(float)); // uv
-            GL.EnableVertexAttribArray(1);
-            GL.VertexAttribPointer(2, 4, VertexAttribPointerType.Float, false, stride, 4 * sizeof(float)); // colour
-            GL.EnableVertexAttribArray(2);
+            // Each attribute starts where the one before it ends
+            int uvOffset = POSITIONSIZE * sizeof(float);
+            int colorOffset = (POSITIONSIZE + UVSIZE) * sizeof(float);
+            GL.VertexAttribPointer(POSITIONLOCATION, POSITIONSIZE, VertexAttribPointerType.Float, false, stride, 0);
+            GL.EnableVertexAttribArray(POSITIONLOCATION);
+            GL.VertexAttribPointer(UVLOCATION, UVSIZE, VertexAttribPointerType.Float, false, stride, uvOffset);
+            GL.EnableVertexAttribArray(UVLOCATION);
+            GL.VertexAttribPointer(COLORLOCATION, COLORSIZE, VertexAttribPointerType.Float, false, stride, colorOffset);
+            GL.EnableVertexAttribArray(COLORLOCATION);
 
             GL.BindVertexArray(0);
 
@@ -193,7 +211,7 @@ namespace GPR202_A3.Debugging
         {
             ErrorCode error;
             while ((error = GL.GetError()) != ErrorCode.NoError)
-                Log($"GL error after {context}: {error}", Color4.Red, 10f);
+                Log($"GL error after {context}: {error}", Color4.Red, WARNINGDURATION);
         }
 
         /// <summary>
@@ -259,7 +277,7 @@ namespace GPR202_A3.Debugging
         /// </summary>
         private static void AddGlyph(int index, float x, float y, float size, Color4 color)
         {
-            EnsureCapacity(_floatCount + 6 * _floatsPerVertex);
+            EnsureCapacity(_floatCount + VERTICESPERGLYPH * _floatsPerVertex);
 
             int column = index % _columns;
             int row = index / _columns;

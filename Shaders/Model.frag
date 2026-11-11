@@ -8,6 +8,19 @@ in vec3 WorldBitangent; // World-space bitangent (normal mapping)
 
 out vec4 FragColor; // Output colour of the fragment
 
+// Highlight size: fully rough = MINSHININESS (broad and faint), fully smooth = MAXSHININESS (small and sharp)
+const float MINSHININESS = 8.0;
+const float MAXSHININESS = 256.0;
+
+// Sky reflection strength on metal, from fully rough (MINREFLECTION) to fully smooth (1)
+const float MINREFLECTION = 0.3;
+
+// How much of the diffuse colour fully metallic surfaces lose (metal mostly reflects instead)
+const float METALDIFFUSELOSS = 0.8;
+
+// Colour of the wireframe debug view
+const vec3 WIREFRAMECOLOR = vec3(1.0, 1.0, 0.0);
+
 uniform sampler2D AlbedoMap; // Surface colour, laid out to the model's UVs (unit 0)
 uniform sampler2D NormalMap; // Tangent-space normal map, OpenGL convention (unit 1)
 uniform sampler2D MetallicMap; // Greyscale, white = metal (unit 2)
@@ -65,7 +78,7 @@ void main()
     FragColor = vec4(TexCoord, 0.0, 1.0);
     else if (DebugView == DEBUGVIEW_WIREFRAME)
     // Wireframe: Game switches to line rasterisation, so only edges reach here; draw them in one solid colour
-    FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+    FragColor = vec4(WIREFRAMECOLOR, 1.0);
     else if (DebugView == DEBUGVIEW_METALLIC)
     // Metallic: white = metal, black = non-metal
     FragColor = vec4(vec3(metallic), 1.0);
@@ -85,9 +98,9 @@ void main()
         float diffuse = max(dot(N, L), 0.0);
 
         // Roughness drives the highlight: smooth = small and bright, rough = broad and faint, fully rough = none.
-        // A simple remap that keeps shininess in the 8..256 range that suits these flat-shaded models.
+        // Smoothness squared, so the highlight only gets sharp on quite smooth surfaces
         float smoothness = 1.0 - clamp(roughness, 0.0, 1.0);
-        float shininess = mix(8.0, 256.0, smoothness * smoothness);
+        float shininess = mix(MINSHININESS, MAXSHININESS, smoothness * smoothness);
         float specularStrength = smoothness;
 
         // Blinn-Phong specular: a highlight where the light reflects towards the camera
@@ -101,10 +114,10 @@ void main()
         // The reflection is tinted by the specular colour and scaled by the metallic factor.
         vec3 R = reflect(-V, N);
         vec3 reflection = texture(SkyboxMap, normalize(mix(R, N, roughness))).rgb;
-        vec3 environment = reflection * specularColour * metallic * mix(0.3, 1.0, smoothness);
+        vec3 environment = reflection * specularColour * metallic * mix(MINREFLECTION, 1.0, smoothness);
 
         // Diffuse amount: metals don't have diffuse reflection, so we scale it down by the metallic factor.
-        float diffuseAmount = 1.0 - 0.8 * metallic;
+        float diffuseAmount = 1.0 - METALDIFFUSELOSS * metallic;
 
         // Combine the three lighting components, plus a minimum ambient brightness so faces facing away from the light aren't pitch black.
         vec3 colour = albedo * diffuseAmount * (ambientStrength + diffuse) * lightColor

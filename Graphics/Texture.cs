@@ -11,6 +11,11 @@ namespace GPR202_A3.Graphics
     /// </summary>
     internal class Texture : IGraphicsResources
     {
+        #region Constants
+        // Alpha for single-colour textures (fully opaque)
+        private const byte OPAQUE = 255;
+        #endregion
+
         #region Public Fields
         /// <summary>
         /// Gets the ID of the texture object in OpenGL.
@@ -36,7 +41,7 @@ namespace GPR202_A3.Graphics
             
             if (string.IsNullOrEmpty(filename))
             {
-                DebugText.Log("Texture filename is null or empty.", Color4.Red, 6f);
+                DebugText.Log("Texture filename is null or empty.", Color4.Red, DebugText.WARNINGDURATION);
                 return;
             }
             
@@ -67,7 +72,7 @@ namespace GPR202_A3.Graphics
 
                 if (image == null)
                 {
-                    DebugText.Log($"Failed to load texture '{filename}': ImageResult is null.", Color4.Red, 6f);
+                    DebugText.Log($"Failed to load texture '{filename}': ImageResult is null.", Color4.Red, DebugText.WARNINGDURATION);
                 }
                 else
                 {
@@ -80,12 +85,12 @@ namespace GPR202_A3.Graphics
                     if (!pixelPerfect)
                         GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
 
-                    DebugText.Log($"Loaded '{filename}' ({image.Width}x{image.Height})", Color4.LightGreen, 6f);
+                    DebugText.Log($"Loaded '{filename}' ({image.Width}x{image.Height})", Color4.LightGreen, DebugText.INFODURATION);
                 }
             }
             catch (Exception e)
             {
-                DebugText.Log($"Texture '{filename}' failed: {e.Message}", Color4.Red, 6f);
+                DebugText.Log($"Texture '{filename}' failed: {e.Message}", Color4.Red, DebugText.WARNINGDURATION);
             }
 
             // Unbind the texture to prevent accidental modification
@@ -116,7 +121,7 @@ namespace GPR202_A3.Graphics
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
 
-            byte[] pixel = { red, green, blue, 255 };
+            byte[] pixel = { red, green, blue, OPAQUE };
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, 1, 1, 0,
                 PixelFormat.Rgba, PixelType.UnsignedByte, pixel);
 

@@ -4,37 +4,30 @@ using GPR202_A3.Debugging;
 using GPR202_A3.Graphics;
 using GPR202_A3.Utilities;
 using OpenTK.Mathematics;
-// Assimp has its own Scene, Mesh and Material types, which clash with this project's names,
-// so these aliases make it clear which one is meant.
+// Assimp has its own Scene and Mesh types, so these aliases make it clear which one is meant
 using AssimpScene = Assimp.Scene;
 using AssimpMesh = Assimp.Mesh;
 
 namespace GPR202_A3.Loading
 {
     /// <summary>
-    /// Loads model files (.obj and anything else Assimp supports) into MeshData, ready to upload with Mesh.
-    ///
-    /// Replaces the import code that was copied into Plane and Balloon. Every model goes through the same
-    /// post-processing steps, every part of a file is kept (not just the first mesh), and the native Assimp
-    /// library is only pointed at a custom path on macOS, so the same code runs on Windows.
+    /// Loads model files with Assimp into MeshData, ready to upload with Mesh.
+    /// Every model gets the same post-processing, and each part of a file can be kept separate.
     /// </summary>
     internal static class ModelLoader
     {
         #region Constants
-        // Homebrew's Assimp on Apple Silicon. Only used on macOS, and only if the file exists;
-        // otherwise (and on Windows) the native library that ships with the NuGet package is used.
+        // Homebrew's Assimp on Apple Silicon. Only used on macOS if the file exists; Windows uses the NuGet package's copy.
         private const string MACASSIMPPATH = "/opt/homebrew/opt/assimp/lib/libassimp.dylib";
 
-        // Post-processing applied to every model as it is imported:
-        //  - Triangulate: splits quads and n-gons into triangles (the only primitive Mesh draws)
-        //  - JoinIdenticalVertices: OBJ stores a separate vertex per face corner; this merges identical ones
-        //    so the index buffer can reuse them (far fewer vertices to upload and transform)
-        //  - GenerateSmoothNormals: creates normals for lighting if the file has none
+        // Post-processing applied to every model:
+        //  - Triangulate: turns quads and n-gons into triangles
+        //  - JoinIdenticalVertices: merges duplicate vertices so the index buffer can reuse them
+        //  - GenerateSmoothNormals: makes normals if the file has none
         //  - CalculateTangentSpace: tangents and bitangents for normal mapping
-        //  - ImproveCacheLocality: reorders triangles so the GPU's vertex cache is reused more often
-        //  - ValidateDataStructure: catches broken files at import instead of at draw time
-        // OptimizeMeshes and PreTransformVertices are left out on purpose: they would merge the parts
-        // of a model (e.g. the plane's propeller into its body), and the parts must stay separate to animate them.
+        //  - ImproveCacheLocality: reorders triangles so the GPU reuses vertices it has just processed
+        //  - ValidateDataStructure: catches broken files at load instead of at draw time
+        // OptimizeMeshes and PreTransformVertices are left out because they merge parts (e.g. the propeller into the body).
         private const PostProcessSteps IMPORTSTEPS =
             PostProcessSteps.Triangulate |
             PostProcessSteps.JoinIdenticalVertices |
@@ -42,20 +35,23 @@ namespace GPR202_A3.Loading
             PostProcessSteps.CalculateTangentSpace |
             PostProcessSteps.ImproveCacheLocality |
             PostProcessSteps.ValidateDataStructure;
+
+        // Indices in one triangle
+        private const int TRIANGLEINDICES = 3;
         #endregion
 
         #region Private Fields
-        // Whether the native library check has been done (it only needs doing once)
+        // Whether the native library has been set up yet (only needed once)
         private static bool _nativeLibraryChecked;
         #endregion
 
         #region Public API
         /// <summary>
-        /// Loads every part of a model file as its own MeshData, keyed by the part's name.
-        /// In an .obj file each part is an object ("o Propeller"), so the names match the objects in Blender.
+        /// Loads each part of a model file as its own MeshData, keyed by the part's name
+        /// (in an .obj file, the object names from Blender, e.g. "Propeller").
         /// </summary>
-        /// <param name="relativePath">The model file, relative to the Resource folder (e.g. "Model/plane.obj").</param>
-        /// <returns>One MeshData per part. Empty if the file could not be loaded (the error is logged).</returns>
+        /// <param name="relativePath">The model file, relative to the Resource folder.</param>
+        /// <returns>One MeshData per part, or none if the file failed to load.</returns>
         public static Dictionary<string, MeshData> LoadParts(string relativePath)
         {
             var parts = new Dictionary<string, MeshData>();
@@ -65,15 +61,15 @@ namespace GPR202_A3.Loading
 
             CollectNode(scene, scene.RootNode, parts);
 
-            DebugText.Log($"{relativePath}: parts [{string.Join(", ", parts.Keys)}]", Color4.LightGreen, 6f);
+            DebugText.Log($"{relativePath}: parts [{string.Join(", ", parts.Keys)}]", Color4.LightGreen, DebugText.INFODURATION);
             return parts;
         }
 
         /// <summary>
-        /// Loads every part of a model file merged into one MeshData, for models that never move their parts separately.
+        /// Loads a whole model file as one MeshData, for models whose parts never move separately.
         /// </summary>
-        /// <param name="relativePath">The model file, relative to the Resource folder (e.g. "Model/balloon.obj").</param>
-        /// <returns>The whole model as one MeshData. Empty if the file could not be loaded (the error is logged).</returns>
+        /// <param name="relativePath">The model file, relative to the Resource folder.</param>
+        /// <returns>The model, or an empty MeshData if the file failed to load.</returns>
         public static MeshData Load(string relativePath)
         {
             var merged = new MeshData();
@@ -90,9 +86,8 @@ namespace GPR202_A3.Loading
 
         #region Helper Methods
         /// <summary>
-        /// Imports a file with Assimp, applying the post-processing steps above.
+        /// Imports a file with Assimp.
         /// </summary>
-        /// <param name="relativePath">The model file, relative to the Resource folder.</param>
         /// <returns>The imported scene, or null if it failed (the error is logged).</returns>
         private static AssimpScene? Import(string relativePath)
         {
@@ -101,27 +96,26 @@ namespace GPR202_A3.Loading
             string path = AssetPaths.Resource(relativePath);
             if (!File.Exists(path))
             {
-                DebugText.Log($"Model '{relativePath}' not found", Color4.Red, 10f);
+                DebugText.Log($"Model '{relativePath}' not found", Color4.Red, DebugText.WARNINGDURATION);
                 return null;
             }
 
             try
             {
-                // The context only lives for this import; 'using' releases its unmanaged memory straight away
+                // 'using' frees Assimp's unmanaged memory as soon as the import is done
                 using var importer = new AssimpContext();
                 return importer.ImportFile(path, IMPORTSTEPS);
             }
             catch (AssimpException e)
             {
                 Console.WriteLine($"Assimp failed to import '{path}': {e.Message}");
-                DebugText.Log($"Model '{relativePath}' failed to import (see console)", Color4.Red, 10f);
+                DebugText.Log($"Model '{relativePath}' failed to import (see console)", Color4.Red, DebugText.WARNINGDURATION);
                 return null;
             }
         }
 
         /// <summary>
-        /// Points Assimp at Homebrew's native library on macOS (Apple Silicon), once.
-        /// On Windows this does nothing, and the win-x64 library from the NuGet package is loaded automatically.
+        /// On macOS, points Assimp at Homebrew's library. Does nothing on Windows.
         /// </summary>
         private static void EnsureNativeLibrary()
         {
@@ -136,12 +130,8 @@ namespace GPR202_A3.Loading
         }
 
         /// <summary>
-        /// Walks the node tree, adding each node's meshes to the part with the node's name.
-        /// A part made of several meshes (one per material) is merged into a single MeshData.
+        /// Adds each node's meshes to the part with the node's name, then does the same for its children.
         /// </summary>
-        /// <param name="scene">The imported scene, which owns the meshes.</param>
-        /// <param name="node">The node to collect, then its children.</param>
-        /// <param name="parts">The parts found so far, keyed by name.</param>
         private static void CollectNode(AssimpScene scene, Node node, Dictionary<string, MeshData> parts)
         {
             if (node.HasMeshes)
@@ -161,13 +151,11 @@ namespace GPR202_A3.Loading
         }
 
         /// <summary>
-        /// Copies one Assimp mesh onto the end of a MeshData, offsetting its indices past the vertices already there.
+        /// Copies an Assimp mesh onto the end of a MeshData.
         /// </summary>
-        /// <param name="data">The MeshData to add to.</param>
-        /// <param name="mesh">The Assimp mesh to copy.</param>
         private static void AppendMesh(MeshData data, AssimpMesh mesh)
         {
-            // Indices in this mesh start at 0, so they are moved past any vertices already in data
+            // This mesh's indices start at 0, so they are moved past the vertices already in data
             int vertexOffset = data.VertexCount;
 
             bool hasUVs = mesh.HasTextureCoords(0);
@@ -178,13 +166,13 @@ namespace GPR202_A3.Loading
                 data.Positions.Add(ToVector3(mesh.Vertices[i]));
                 data.Normals.Add(ToVector3(mesh.Normals[i]));
 
-                // A mesh without UVs still needs one per vertex so the attribute counts match
+                // Every vertex needs a UV so the attribute counts match
                 if (hasUVs)
                     data.UVs.Add(ToVector2(mesh.TextureCoordinateChannels[0][i]));
                 else
                     data.UVs.Add(Vector2.Zero);
 
-                // Assimp's tangents are used if it made them; otherwise Mesh works them out on upload
+                // If Assimp didn't make tangents, Mesh works them out on upload
                 if (hasTangents)
                 {
                     data.Tangents.Add(ToVector3(mesh.Tangents[i]));
@@ -194,12 +182,12 @@ namespace GPR202_A3.Loading
 
             foreach (Face face in mesh.Faces)
             {
-                // Triangulate guarantees 3 indices per face; anything else (points, lines) is skipped
-                if (face.IndexCount != 3)
+                // Skip anything that isn't a triangle (points or lines)
+                if (face.IndexCount != TRIANGLEINDICES)
                     continue;
 
-                for (int j = 0; j < 3; j++)
-                    data.Indices.Add((uint)(face.Indices[j] + vertexOffset));
+                foreach (int index in face.Indices)
+                    data.Indices.Add((uint)(index + vertexOffset));
             }
         }
 

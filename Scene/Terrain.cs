@@ -9,37 +9,27 @@ using OpenTK.Mathematics;
 namespace GPR202_A3.Scene
 {
     /// <summary>
-    /// The desert landscape, generated in code and drawn entirely from a height texture on the GPU.
-    ///
-    /// How it works:
-    ///  1. DesertGenerator makes a grid of heights (dunes and an oasis basin) once, at load.
-    ///  2. The heights are uploaded as a float texture (HeightMapTexture). A copy stays on the CPU for
-    ///     GetHeightAt (balloon spawning now, collision and prop placement later).
-    ///  3. The mesh has no vertex buffer at all. Each vertex works out its own grid position from gl_VertexID,
-    ///     reads its height from the texture, and works out its normal from its neighbours' heights, all in the
-    ///     vertex shader. The only buffer is the index buffer, which joins the grid into triangle strips.
-    ///  4. AddCrater changes part of the height texture while the game runs, and the surface and lighting update
-    ///     immediately because the vertex shader reads the new heights next frame.
+    /// The desert landscape. The heights are generated once at load and stored in a texture; the vertex shader
+    /// builds each vertex from that texture, so the terrain has no vertex buffer. A CPU copy of the heights is
+    /// kept for GetHeightAt, and craters change both copies while the game runs.
     /// </summary>
     internal class Terrain
     {
         #region Constants
-        // Grid points (vertices) along each side. The original used 2048 (4.2 million vertices); 1024 is a quarter of
-        // that, which suits smooth dunes. Change it to compare: the world size stays the same, only the spacing changes.
+        // Vertices along each side (the original used 2048). The world size stays the same, only the spacing changes.
         private const int GRIDSIZE = 1024;
 
-        // Width and length of the terrain in world units (the same as the original)
+        // Width and length of the terrain, in world units (the same as the original)
         private const float WORLDSIZE = 2048f;
 
-        // Seed for the desert generator: change it for a different (but repeatable) desert
+        // Seed for the desert generator (change it for a different desert)
         private const int SEED = 2026;
 
-        // Height of the oasis water's surface, in world units (the water is drawn in Step 2)
+        // Height of the oasis water's surface
         private const float WATERLEVEL = -12f;
 
-        // How many world units one repeat of each sand texture covers. They are separate so the ripples (normal map)
-        // can be scaled up without stretching the sand's grain (colour map). The normal map has 14 ripples per repeat,
-        // so the ripples are RIPPLETILESIZE / 14 units apart.
+        // World units covered by one repeat of each sand texture.
+        // Separate sizes let the ripples be scaled without stretching the sand grain.
         private const float SANDTILESIZE = 96f;
         private const float RIPPLETILESIZE = 24f;
 
@@ -48,18 +38,28 @@ namespace GPR202_A3.Scene
         private const int SANDCOLORUNIT = 1;
         private const int SANDNORMALUNIT = 2;
 
-        // The index that tells OpenGL "end this strip and start a new one" (primitive restart).
-        // The largest possible index, so it can never be a real vertex.
+        // Colours used if a sand texture is missing: plain sand, and a flat normal (pointing straight out)
+        private static readonly (byte R, byte G, byte B) FallbackSandColor = (220, 180, 125);
+        private static readonly (byte R, byte G, byte B) FlatNormalColor = (128, 128, 255);
+
+        // Index that ends one triangle strip and starts the next (primitive restart).
+        // The largest possible index, so it is never a real vertex.
         private const uint RESTARTINDEX = uint.MaxValue;
 
-        // Craters: how far out (as a multiple of the radius) the raised rim is worked out. By 2x the rim has faded
-        // to almost nothing (0.01% of the depth), so there is no visible step where the changed square ends.
-        private const float CRATERRIMEXTENT = 2f;
+        // How far out a crater changes the terrain, as a multiple of its radius.
+        // The rim has faded to almost nothing by then, so there is no step at the edge of the changed area.
+        private const float CRATERREACH = 2f;
+
+        // Keeps GetHeightAt's lookups inside the grid (x0 + 1 must still be a real grid point)
+        private const float GRIDEDGEMARGIN = 0.001f;
+
+        // For the memory readout
+        private const double BYTESPERMB = 1024.0 * 1024.0;
         #endregion
 
         #region Public Fields
         /// <summary>
-        /// Grid points along each side.
+        /// Vertices along each side.
         /// </summary>
         public static int GridSize => GRIDSIZE;
 
@@ -69,20 +69,22 @@ namespace GPR202_A3.Scene
         public static float Size => WORLDSIZE;
 
         /// <summary>
-        /// World units between neighbouring grid points.
+        /// World units between neighbouring vertices.
         /// </summary>
         public static float Spacing => WORLDSIZE / (GRIDSIZE - 1);
 
         /// <summary>
-        /// Height of the oasis water's surface, in world units.
+        /// Height of the oasis water's surface.
         /// </summary>
         public static float WaterLevel => WATERLEVEL;
         #endregion
 
         #region Private Fields
-        // CPU copy of every grid point's height, row by row (index = z * GRIDSIZE + x). Shared so anything can
-        // ask for the surface height, and kept in step with the GPU texture when craters change it.
+        // CPU copy of every height, row by row (index = z * GRIDSIZE + x)
         private static float[] _heights = new float[GRIDSIZE * GRIDSIZE];
+
+        // Half the world size: the grid runs from -HalfSize to +HalfSize
+        private static float HalfSize => WORLDSIZE / 2f;
 
         // GPU resources this class owns, deleted in Delete()
         private readonly ShaderProgram _shader;
@@ -96,7 +98,7 @@ namespace GPR202_A3.Scene
 
         #region Constructors
         /// <summary>
-        /// Constructor that generates the desert, uploads it, and builds the strip indices and shader.
+        /// Constructor that generates the desert, uploads it, and sets up the indices, textures and shader.
         /// </summary>
         public Terrain()
         {
@@ -105,23 +107,21 @@ namespace GPR202_A3.Scene
             // --- Heights ---
             _heights = DesertGenerator.Generate(GRIDSIZE, Spacing, SEED);
             double generateMs = timer.Elapsed.TotalMilliseconds;
-
             _heightMap = new HeightMapTexture(_heights, GRIDSIZE, HEIGHTMAPUNIT);
 
-            // --- Mesh: indices only ---
-            // The VAO has no attributes: the vertex shader makes each vertex from gl_VertexID and the height texture.
-            // It still has to exist (core OpenGL won't draw without one), and it remembers the index buffer.
+            // --- Indices only ---
+            // The VAO has no vertex attributes, but core OpenGL still needs one bound to draw, and it remembers the IBO
             List<uint> indices = BuildStripIndices();
-            _vao = new VAO();
-            _ibo = new IBO(indices); // created while the VAO is bound (the VAO constructor binds it), so the VAO remembers it
+            _vao = new VAO(); // binds itself, so the IBO below is stored in it
+            _ibo = new IBO(indices);
             _vao.Unbind();
             _indexCount = indices.Count;
 
-            // --- Sand textures (tiling) ---
-            _sandColor = LoadTextureOrDefault("Terrain/SandColor.png", SANDCOLORUNIT, 220, 180, 125);
-            _sandNormal = LoadTextureOrDefault("Terrain/SandNormal.png", SANDNORMALUNIT, 128, 128, 255);
+            // --- Sand textures ---
+            _sandColor = LoadTextureOrDefault("Terrain/SandColor.png", SANDCOLORUNIT, FallbackSandColor);
+            _sandNormal = LoadTextureOrDefault("Terrain/SandNormal.png", SANDNORMALUNIT, FlatNormalColor);
 
-            // --- Shader: values that never change are uploaded once ---
+            // --- Shader (values that never change are uploaded once) ---
             _shader = new ShaderProgram("Terrain.vert", "Terrain.frag");
             _shader.Bind();
             _shader.SetInt("HeightMap", HEIGHTMAPUNIT);
@@ -134,46 +134,40 @@ namespace GPR202_A3.Scene
             _shader.SetFloat("WaterLevel", WATERLEVEL);
 
             timer.Stop();
-            long indexBytes = (long)_indexCount * sizeof(uint);
+            double indexMB = (long)_indexCount * sizeof(uint) / BYTESPERMB;
             DebugText.Log($"Terrain: {GRIDSIZE}x{GRIDSIZE} grid, generated in {generateMs:0} ms, total {timer.Elapsed.TotalMilliseconds:0} ms",
-                Color4.LightGreen, 8f);
-            DebugText.Log($"Terrain: 0 vertex bytes, {indexBytes / (1024.0 * 1024.0):0.0} MB of indices ({_indexCount} strip indices)",
-                Color4.LightGreen, 8f);
+                Color4.LightGreen, DebugText.INFODURATION);
+            DebugText.Log($"Terrain: 0 vertex bytes, {indexMB:0.0} MB of indices ({_indexCount} strip indices)",
+                Color4.LightGreen, DebugText.INFODURATION);
             DebugText.CheckGLError("Terrain setup");
         }
         #endregion
 
         #region Public API
         /// <summary>
-        /// The height at a grid point, in world units (kept from the original API, now in grid coordinates).
+        /// The height at a grid point (kept from the original code).
         /// </summary>
         /// <param name="x">Grid column, 0 to GridSize - 1.</param>
         /// <param name="z">Grid row, 0 to GridSize - 1.</param>
         public static float GetHeightMapAt(int x, int z) => _heights[z * GRIDSIZE + x];
 
         /// <summary>
-        /// The world position of a grid point on the surface (kept from the original API).
+        /// The world position of a grid point on the surface (kept from the original code).
         /// </summary>
         /// <param name="x">Grid column, 0 to GridSize - 1.</param>
         /// <param name="z">Grid row, 0 to GridSize - 1.</param>
-        public static Vector3 WorldPositionFromHeightMap(int x, int z)
-        {
-            float halfSize = WORLDSIZE * 0.5f;
-            return new Vector3(x * Spacing - halfSize, GetHeightMapAt(x, z), z * Spacing - halfSize);
-        }
+        public static Vector3 WorldPositionFromHeightMap(int x, int z) =>
+            new(x * Spacing - HalfSize, GetHeightMapAt(x, z), z * Spacing - HalfSize);
 
         /// <summary>
         /// The surface height at any world position, blended between the four grid points around it.
         /// Positions outside the terrain use the nearest edge.
         /// </summary>
-        /// <param name="worldX">World x.</param>
-        /// <param name="worldZ">World z.</param>
         public static float GetHeightAt(float worldX, float worldZ)
         {
-            // World position to grid coordinates (fractional), kept inside the grid
-            float halfSize = WORLDSIZE * 0.5f;
-            float gridX = Math.Clamp((worldX + halfSize) / Spacing, 0f, GRIDSIZE - 1.001f);
-            float gridZ = Math.Clamp((worldZ + halfSize) / Spacing, 0f, GRIDSIZE - 1.001f);
+            // World position to grid position, kept inside the grid
+            float gridX = Math.Clamp((worldX + HalfSize) / Spacing, 0f, GRIDSIZE - 1 - GRIDEDGEMARGIN);
+            float gridZ = Math.Clamp((worldZ + HalfSize) / Spacing, 0f, GRIDSIZE - 1 - GRIDEDGEMARGIN);
 
             int x0 = (int)gridX;
             int z0 = (int)gridZ;
@@ -181,31 +175,26 @@ namespace GPR202_A3.Scene
             float fz = gridZ - z0;
 
             // Bilinear: blend along x on both rows, then between the rows
-            float h00 = GetHeightMapAt(x0, z0);
-            float h10 = GetHeightMapAt(x0 + 1, z0);
-            float h01 = GetHeightMapAt(x0, z0 + 1);
-            float h11 = GetHeightMapAt(x0 + 1, z0 + 1);
-            float near = MathHelper.Lerp(h00, h10, fx);
-            float far = MathHelper.Lerp(h01, h11, fx);
+            float near = MathHelper.Lerp(GetHeightMapAt(x0, z0), GetHeightMapAt(x0 + 1, z0), fx);
+            float far = MathHelper.Lerp(GetHeightMapAt(x0, z0 + 1), GetHeightMapAt(x0 + 1, z0 + 1), fx);
             return MathHelper.Lerp(near, far, fz);
         }
 
         /// <summary>
-        /// Blasts a crater into the terrain: a bowl with a raised rim. Changes the CPU heights and uploads only the
-        /// changed square to the GPU, so the surface, its normals and its lighting update next frame.
+        /// Adds a crater to the terrain. Only the changed area is uploaded to the GPU,
+        /// and the shape and lighting update next frame.
         /// </summary>
-        /// <param name="centre">World position of the crater's centre (only x and z are used).</param>
-        /// <param name="radius">Radius of the bowl, in world units.</param>
-        /// <param name="depth">How deep the bowl's centre is, in world units.</param>
+        /// <param name="centre">The crater's centre (only x and z are used).</param>
+        /// <param name="radius">Radius to the rim, in world units.</param>
+        /// <param name="depth">Depth at the centre, in world units.</param>
         public void AddCrater(Vector3 centre, float radius, float depth)
         {
-            // The square of grid points the crater (including its rim) can reach, kept inside the grid
-            float halfSize = WORLDSIZE * 0.5f;
-            float reach = radius * CRATERRIMEXTENT;
-            int minX = Math.Clamp((int)MathF.Floor((centre.X - reach + halfSize) / Spacing), 0, GRIDSIZE - 1);
-            int maxX = Math.Clamp((int)MathF.Ceiling((centre.X + reach + halfSize) / Spacing), 0, GRIDSIZE - 1);
-            int minZ = Math.Clamp((int)MathF.Floor((centre.Z - reach + halfSize) / Spacing), 0, GRIDSIZE - 1);
-            int maxZ = Math.Clamp((int)MathF.Ceiling((centre.Z + reach + halfSize) / Spacing), 0, GRIDSIZE - 1);
+            // The square of grid points the crater reaches, kept inside the grid
+            float reach = radius * CRATERREACH;
+            int minX = WorldToGrid(centre.X - reach, MathF.Floor);
+            int maxX = WorldToGrid(centre.X + reach, MathF.Ceiling);
+            int minZ = WorldToGrid(centre.Z - reach, MathF.Floor);
+            int maxZ = WorldToGrid(centre.Z + reach, MathF.Ceiling);
 
             int width = maxX - minX + 1;
             int height = maxZ - minZ + 1;
@@ -215,9 +204,9 @@ namespace GPR202_A3.Scene
             {
                 for (int x = minX; x <= maxX; x++)
                 {
-                    // Distance from the centre as a fraction of the radius (1 = the bowl's edge)
-                    float dx = x * Spacing - halfSize - centre.X;
-                    float dz = z * Spacing - halfSize - centre.Z;
+                    // Distance from the centre as a fraction of the radius (1 = the rim)
+                    float dx = x * Spacing - HalfSize - centre.X;
+                    float dz = z * Spacing - HalfSize - centre.Z;
                     float distance = MathF.Sqrt(dx * dx + dz * dz) / radius;
 
                     int index = z * GRIDSIZE + x;
@@ -230,7 +219,7 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
-        /// Uploads the sun's direction and colour, and the ambient light. Call once on load.
+        /// Uploads the sunlight settings. Call once on load.
         /// </summary>
         public void SetLighting(Vector3 lightDirection, Vector3 lightColor, float ambientStrength)
         {
@@ -250,11 +239,11 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
-        /// Draws the terrain as triangle strips, with its own shader.
+        /// Draws the terrain.
         /// </summary>
         /// <param name="view">The camera's view matrix.</param>
-        /// <param name="debugView">The current debug view (normals, UVs and wireframe work on the terrain).</param>
-        /// <param name="useLighting">Whether to light the terrain or show the raw sand colour.</param>
+        /// <param name="debugView">The current debug view.</param>
+        /// <param name="useLighting">Whether to light the terrain.</param>
         public void Render(Matrix4 view, DebugView debugView, bool useLighting)
         {
             _shader.Bind();
@@ -266,8 +255,7 @@ namespace GPR202_A3.Scene
             _sandColor.Bind();
             _sandNormal.Bind();
 
-            // Primitive restart: whenever OpenGL meets RESTARTINDEX in the index buffer it ends the current strip and
-            // starts a new one, so the whole grid (one strip per row) is a single draw call
+            // The restart index ends each row's strip, so the whole grid is one draw call
             GL.Enable(EnableCap.PrimitiveRestart);
             GL.PrimitiveRestartIndex(RESTARTINDEX);
 
@@ -294,24 +282,20 @@ namespace GPR202_A3.Scene
 
         #region Helper Methods
         /// <summary>
-        /// Builds the index buffer: one triangle strip per row of grid squares, separated by restart indices.
-        ///
-        /// A strip zig-zags between two rows of vertices: (x, z), (x, z + 1), (x + 1, z), (x + 1, z + 1), ...
-        /// Every new index after the first two makes a triangle with the two before it, so each square of the grid
-        /// costs 2 indices instead of the 6 that separate triangles need. Starting on row z (not z + 1) makes the
-        /// first triangle counter-clockwise when seen from above, so the top faces are the front faces.
-        /// OpenGL flips every second triangle of a strip automatically, so they all keep the same winding.
+        /// Builds one triangle strip per row of the grid, separated by restart indices.
+        /// A strip zig-zags between two rows: (x, z), (x, z + 1), (x + 1, z), ... so each grid square costs
+        /// 2 indices instead of 6. Starting on row z makes the triangles face up (counter-clockwise from above).
         /// </summary>
-        /// <returns>(GRIDSIZE - 1) * (2 * GRIDSIZE + 1) indices.</returns>
         private static List<uint> BuildStripIndices()
         {
+            // Each row: 2 indices per column, plus 1 restart index
             var indices = new List<uint>((GRIDSIZE - 1) * (2 * GRIDSIZE + 1));
 
             for (int z = 0; z < GRIDSIZE - 1; z++)
             {
                 for (int x = 0; x < GRIDSIZE; x++)
                 {
-                    // Vertex (x, z) is number z * GRIDSIZE + x, which the vertex shader turns back into x and z
+                    // Vertex (x, z) is number z * GRIDSIZE + x; the vertex shader turns it back into x and z
                     indices.Add((uint)(z * GRIDSIZE + x));
                     indices.Add((uint)((z + 1) * GRIDSIZE + x));
                 }
@@ -323,16 +307,21 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
-        /// Loads a tiling texture, or makes a plain one-colour texture if the file is missing, so the terrain
-        /// still draws (in a flat colour) instead of black.
+        /// Converts a world x or z to a grid index, rounded with the given function and kept inside the grid.
         /// </summary>
-        private static Texture LoadTextureOrDefault(string file, int unit, byte red, byte green, byte blue)
+        private static int WorldToGrid(float world, Func<float, float> round) =>
+            Math.Clamp((int)round((world + HalfSize) / Spacing), 0, GRIDSIZE - 1);
+
+        /// <summary>
+        /// Loads a texture, or makes a plain one-colour texture if the file is missing.
+        /// </summary>
+        private static Texture LoadTextureOrDefault(string file, int unit, (byte R, byte G, byte B) fallback)
         {
             if (File.Exists(AssetPaths.Resource(file)))
                 return new Texture(file, unit);
 
-            DebugText.Log($"'{file}' not found: using a plain colour instead", Color4.Orange, 10f);
-            return new Texture(red, green, blue, unit);
+            DebugText.Log($"'{file}' not found: using a plain colour instead", Color4.Orange, DebugText.WARNINGDURATION);
+            return new Texture(fallback.R, fallback.G, fallback.B, unit);
         }
         #endregion
     }

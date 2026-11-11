@@ -11,9 +11,8 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 namespace GPR202_A3
 {
     /// <summary>
-    /// The game window: loads the scene, runs the game logic in OnUpdateFrame and draws it in OnRenderFrame.
-    ///
-    /// Balloon Hunt: fly the plane with the mouse and collect every balloon hidden around the landscape.
+    /// The game window: loads the scene, runs the game in OnUpdateFrame and draws it in OnRenderFrame.
+    /// Balloon Hunt: fly the plane with the mouse and collect every balloon.
     /// </summary>
     internal class Game : GameWindow
     {
@@ -21,18 +20,31 @@ namespace GPR202_A3
         // How many balloons each game starts with
         private const int BALLOONSTOTAL = 8;
 
-        // How high above the centre of the terrain the plane starts, in units
+        // Where the plane starts: above the oasis, facing +Z
         private const float STARTHEIGHT = 60f;
+        private const float STARTHEADING = 0f;
 
-        // Sunlight, shared by every lit shader. The direction is the way the light travels: from the sun in the
-        // skybox's left (-X) face, about 24 degrees above the horizon, towards the scene.
+        // Sunlight for every lit shader. The direction is the way the light travels,
+        // from the sun in the skybox's left (-X) face, about 24 degrees above the horizon.
         private static readonly Vector3 SunDirection = new(1f, -0.45f, -0.37f);
         private static readonly Vector3 SunColor = new(1f, 0.95f, 0.85f); // warm desert sunlight
         private const float AMBIENTSTRENGTH = 0.45f;
 
-        // Debug crater (F5) size, in world units. Later steps make craters from crashes and missiles instead.
+        // Size of the F5 debug crater (later, crashes and missiles make craters instead)
         private const float CRATERRADIUS = 18f;
         private const float CRATERDEPTH = 8f;
+
+        // Shown where nothing is drawn (normally covered by the skybox)
+        private static readonly Color4 ClearColor = new(0.3f, 0.4f, 0.5f, 1f);
+
+        // Debug text size (1 = the font's 16px)
+        private const float TEXTSCALE = 1.4f;
+
+        // Keys for the debug readout lines, so each one updates in place
+        private const int FRAMEREADOUT = 1;
+        private const int LOADREADOUT = 2;
+        private const int BALLOONREADOUT = 3;
+        private const int CONTROLSREADOUT = 4;
         #endregion
 
         #region Private Fields
@@ -49,14 +61,14 @@ namespace GPR202_A3
         private bool _useLighting = true;
         private bool _useVSync = true;
 
-        // Debug view: what the shaders output to the screen (texture, normals, UVs, wireframe, metallic, roughness)
+        // What the shaders output (texture, normals, UVs, wireframe, metallic, roughness)
         private static readonly int DebugViewCount = Enum.GetValues<DebugView>().Length;
         private DebugView _debugView;
 
-        // Frame timing readout (frame time, CPU render time and GPU render time)
+        // Frame, CPU and GPU timing
         private readonly FrameTimer _frameTimer = new();
 
-        // How long OnLoad took, shown on screen to compare optimisations
+        // How long OnLoad took
         private double _loadMs;
 
         // Scene
@@ -101,20 +113,19 @@ namespace GPR202_A3
 
             // --- Debugging Setup ---
             DebugText.Initialize(_width, _height);
-            DebugText.TextScale = 1.4f;
+            DebugText.TextScale = TEXTSCALE;
             _frameTimer.Initialize();
 
             // --- Render state ---
-            GL.ClearColor(new Color4(0.3f, 0.4f, 0.5f, 1f));
+            GL.ClearColor(ClearColor);
             GL.Enable(EnableCap.DepthTest);
             if (_useBackfaceCulling)
                 GL.Enable(EnableCap.CullFace);
-            // Front faces are wound counter-clockwise (OpenGL's default, and what Blender exports)
+            // Front faces are counter-clockwise (OpenGL's default, and what Blender exports)
             GL.FrontFace(FrontFaceDirection.Ccw);
             VSync = VSyncMode.On;
 
-            // --- Model shader and the uniforms that never change ---
-            // Uniforms keep their value until changed, so values that stay the same for the whole run are uploaded once.
+            // --- Model shader (values that never change are uploaded once) ---
             _modelShader = new ShaderProgram("Model.vert", "Model.frag");
             _modelShader.Bind();
             _modelShader.SetVector3("lightDir", SunDirection);
@@ -130,7 +141,7 @@ namespace GPR202_A3
             // Six faces in OpenGL's cube map order: +X, -X, +Y, -Y, +Z, -Z
             _skybox = new Skybox(["Skybox/right.jpg", "Skybox/left.jpg", "Skybox/top.jpg",
                                   "Skybox/bottom.jpg", "Skybox/front.jpg", "Skybox/back.jpg"]);
-            _terrain = new Terrain(); // before anything that is placed on the terrain
+            _terrain = new Terrain(); // first, so things can be placed on it
             _terrain.SetLighting(SunDirection, SunColor, AMBIENTSTRENGTH);
             _plane = new Plane(GetStartPosition());
             _balloonModel = new Balloon();
@@ -167,14 +178,14 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Keeps the camera's aspect ratio and the debug text layout in step with the window size.
+        /// Keeps the camera and debug text in step with the window size.
         /// </summary>
         protected override void OnResize(ResizeEventArgs e)
         {
             base.OnResize(e);
 
-            // Window size in screen coordinates. On a Retina/HiDPI display this is smaller than the framebuffer
-            // (in pixels), which is why the viewport is set in OnFramebufferResize instead.
+            // Window size in screen coordinates. On a Retina display this is smaller than the framebuffer
+            // (in pixels), so the viewport is set in OnFramebufferResize instead.
             _width = e.Width;
             _height = e.Height;
 
@@ -184,7 +195,7 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Sets the viewport to the framebuffer's size in pixels (which differs from the window size on Retina displays).
+        /// Sets the viewport to the framebuffer's size in pixels.
         /// </summary>
         protected override void OnFramebufferResize(FramebufferResizeEventArgs e)
         {
@@ -199,7 +210,7 @@ namespace GPR202_A3
         {
             base.OnUpdateFrame(args);
 
-            // Seconds since the last update, which keeps movement frame-rate independent
+            // Seconds since the last update, so movement doesn't depend on the frame rate
             float deltaTime = (float)args.Time;
             DebugText.Update(deltaTime);
 
@@ -213,7 +224,7 @@ namespace GPR202_A3
             HandleDebugKeys(kb);
             ShowDebugReadouts();
 
-            // Pause the game while the window isn't focused (the cursor is elsewhere)
+            // Pause while the window isn't focused
             if (!IsFocused || _plane == null || _camera == null)
                 return;
 
@@ -223,25 +234,25 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Draws the scene: opaque models first, then the terrain, then the sky, then the debug text on top.
+        /// Draws the models, then the terrain, then the sky, then the debug text on top.
         /// </summary>
         protected override void OnRenderFrame(FrameEventArgs args)
         {
-            // Time the work this frame issues (stopped before SwapBuffers, which is where VSync waits)
+            // Timing stops before SwapBuffers, which is where VSync waits
             _frameTimer.BeginFrame();
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
             if (_modelShader != null && _camera != null)
             {
-                Matrix4 view = _camera.GetViewMatrix(); // shared by every shader this frame
+                Matrix4 view = _camera.GetViewMatrix();
 
-                // Wireframe: rasterise only the triangle edges
+                // Wireframe: draw only the triangle edges
                 if (_debugView == DebugView.Wireframe)
                     GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
 
                 // --- Models (plane and balloons) ---
-                // Only what can change between frames is uploaded here: the camera and the debug toggles
+                // Only the values that change each frame are uploaded here
                 _modelShader.Bind();
                 _modelShader.SetMatrix4("view", view);
                 _modelShader.SetVector3("cameraPos", _camera.Position);
@@ -257,15 +268,14 @@ namespace GPR202_A3
                 }
 
                 // --- Terrain ---
-                // Drawn after the small models, so the depth test skips terrain pixels hidden behind them
+                // After the models, so terrain pixels hidden behind them are skipped by the depth test
                 _terrain?.Render(view, _debugView, _useLighting);
 
-                // Back to filled polygons, so the sky and debug text aren't drawn as lines
+                // Back to filled polygons for the sky and debug text
                 GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
 
                 // --- Skybox ---
-                // Drawn last at the far plane: pixels already covered by the scene fail the depth test,
-                // so the cube map is only sampled where the sky is actually visible
+                // Last, so the sky is only drawn where nothing else covers it
                 _skybox?.Render(view);
             }
 
@@ -294,13 +304,13 @@ namespace GPR202_A3
             _balloonsLeft = BALLOONSTOTAL;
             UpdateTitle();
 
-            _plane?.Reset(GetStartPosition(), 0f);
+            _plane?.Reset(GetStartPosition(), STARTHEADING);
             if (_plane != null)
                 _camera?.SnapTo(_plane.Position, _plane.Forward);
         }
 
         /// <summary>
-        /// Updates every balloon, counts newly collected ones, and removes those whose animation has finished.
+        /// Updates the balloons, counts new collections, and removes balloons that have finished animating.
         /// </summary>
         private void UpdateBalloons(float deltaTime)
         {
@@ -319,17 +329,17 @@ namespace GPR202_A3
                 {
                     _balloonsLeft--;
                     UpdateTitle();
-                    DebugText.Log($"Balloon collected! {_balloonsLeft} remaining.", Color4.Yellow, 3f);
+                    DebugText.Log($"Balloon collected! {_balloonsLeft} remaining.", Color4.Yellow, DebugText.EVENTDURATION);
                 }
 
-                // The original left finished balloons in the list and kept drawing them at scale 0
+                // The original never removed them, and kept drawing them at scale 0
                 if (balloon.Finished)
                     _balloons.RemoveAt(i);
             }
         }
 
         /// <summary>
-        /// The plane's starting point: above the oasis in the middle of the terrain.
+        /// The plane's starting point, above the oasis.
         /// </summary>
         private static Vector3 GetStartPosition()
         {
@@ -338,11 +348,11 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Debug toggles on the function keys, so the gameplay keys stay free.
+        /// Debug toggles, on the function keys so the gameplay keys stay free.
         /// </summary>
         private void HandleDebugKeys(KeyboardState kb)
         {
-            // F1: cycle the debug view (texture - normals - UVs - wireframe - metallic - roughness)
+            // F1: next debug view
             if (kb.IsKeyPressed(Keys.F1))
                 _debugView = (DebugView)(((int)_debugView + 1) % DebugViewCount);
 
@@ -360,40 +370,40 @@ namespace GPR202_A3
                     GL.Disable(EnableCap.CullFace);
             }
 
-            // F4: VSync on/off. Off shows the real frame rate, for measuring optimisations.
+            // F4: VSync on/off (off shows the real frame rate, for measuring)
             if (kb.IsKeyPressed(Keys.F4))
             {
                 _useVSync = !_useVSync;
                 VSync = _useVSync ? VSyncMode.On : VSyncMode.Off;
             }
 
-            // F5: blast a crater into the terrain under the plane (shows the height map changing at runtime)
+            // F5: crater under the plane
             if (kb.IsKeyPressed(Keys.F5) && _plane != null && _terrain != null)
                 _terrain.AddCrater(_plane.Position, CRATERRADIUS, CRATERDEPTH);
         }
 
         /// <summary>
-        /// Keyed debug lines, updated in place every frame.
+        /// The debug readout lines, updated in place.
         /// </summary>
         private void ShowDebugReadouts()
         {
             DebugText.Log($"Frame: {_frameTimer.AverageFrameMs:0.0} ms ({_frameTimer.AverageFps:0} FPS), " +
                           $"CPU: {_frameTimer.AverageRenderMs:0.00} ms, GPU: {_frameTimer.AverageGpuMs:0.00} ms",
-                Color4.White, 0.5f, key: 1);
-            DebugText.Log($"Load: {_loadMs:0} ms", Color4.White, 0.5f, key: 2);
-            DebugText.Log($"Balloons remaining: {_balloonsLeft}", Color4.DarkGreen, 0.5f, key: 3);
+                Color4.White, DebugText.READOUTDURATION, FRAMEREADOUT);
+            DebugText.Log($"Load: {_loadMs:0} ms", Color4.White, DebugText.READOUTDURATION, LOADREADOUT);
+            DebugText.Log($"Balloons remaining: {_balloonsLeft}", Color4.DarkGreen, DebugText.READOUTDURATION, BALLOONREADOUT);
             DebugText.Log($"F1 Debug View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
                           $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}  F5 Crater  Esc: Quit",
-                Color4.DarkMagenta, 0.5f, key: 4);
+                Color4.DarkMagenta, DebugText.READOUTDURATION, CONTROLSREADOUT);
         }
 
         /// <summary>
-        /// Shows the balloons left in the window title (as the original did), only when the count changes.
+        /// Shows the balloons left in the window title, like the original. Only called when the count changes.
         /// </summary>
         private void UpdateTitle() => Title = $"{_title}  -  Balloons remaining: {_balloonsLeft}";
 
         /// <summary>
-        /// Uploads the camera's projection matrix to every shader that uses it. Called on load and on resize.
+        /// Uploads the projection matrix to every shader that uses it (on load and on resize).
         /// </summary>
         private void UploadProjection()
         {

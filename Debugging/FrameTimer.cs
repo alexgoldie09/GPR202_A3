@@ -4,13 +4,9 @@ using OpenTK.Graphics.OpenGL4;
 namespace GPR202_A3.Debugging
 {
     /// <summary>
-    /// Tracks the average frame time, CPU render time and GPU render time over a short sample of frames.
-    ///
-    /// Frame time is the whole gap between frames, including the VSync wait, so it follows the monitor's refresh rate.
-    /// CPU render time is only how long this program spends issuing a frame's work.
-    /// GPU render time is how long the graphics card spends actually drawing it, measured with OpenGL timer queries.
-    /// The two can be very different: issuing one huge draw call is quick on the CPU but slow on the GPU,
-    /// so both are needed to see where the time goes and what an optimisation changed.
+    /// Averages the frame time, CPU time and GPU time over a short sample of frames.
+    /// Frame time includes the VSync wait. CPU time is how long the program takes to send a frame's work;
+    /// GPU time is how long the graphics card takes to draw it (from OpenGL timer queries).
     /// </summary>
     internal class FrameTimer
     {
@@ -18,9 +14,16 @@ namespace GPR202_A3.Debugging
         // How long each average covers, in seconds
         private const double SAMPLESECONDS = 0.5;
 
-        // Timer query results arrive a few frames late (the GPU runs behind the CPU), so several queries take turns.
+        // The GPU runs a few frames behind, so several timer queries take turns.
         // A query is only reused once its result has been read, so the CPU never waits for the GPU.
         private const int QUERYCOUNT = 4;
+
+        // Unit conversions
+        private const double MSPERSECOND = 1000.0;
+        private const double NANOSECONDSPERMS = 1_000_000.0;
+
+        // Smallest frame time used for the FPS, so it never divides by zero
+        private const double MINFRAMEMS = 0.001;
         #endregion
 
         #region Public Fields
@@ -42,7 +45,7 @@ namespace GPR202_A3.Debugging
         /// <summary>
         /// Average frames per second over the last sample.
         /// </summary>
-        public double AverageFps => 1000.0 / Math.Max(AverageFrameMs, 0.001); // the minimum avoids dividing by zero
+        public double AverageFps => MSPERSECOND / Math.Max(AverageFrameMs, MINFRAMEMS);
         #endregion
 
         #region Private Fields
@@ -102,7 +105,7 @@ namespace GPR202_A3.Debugging
             CollectGpuResults();
 
             _sampleElapsed += frameSeconds;
-            _sampleFrameTime += frameSeconds * 1000.0;
+            _sampleFrameTime += frameSeconds * MSPERSECOND;
             _sampleRenderTime += _renderStopwatch.Elapsed.TotalMilliseconds;
             _sampleFrames++;
 
@@ -145,7 +148,7 @@ namespace GPR202_A3.Debugging
 
                 // The result is in nanoseconds
                 GL.GetQueryObject(_queries[i], GetQueryObjectParam.QueryResult, out long nanoseconds);
-                _sampleGpuTime += nanoseconds / 1_000_000.0;
+                _sampleGpuTime += nanoseconds / NANOSECONDSPERMS;
                 _sampleGpuFrames++;
                 _queryPending[i] = false;
             }

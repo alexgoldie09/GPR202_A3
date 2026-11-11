@@ -3,11 +3,8 @@ using OpenTK.Graphics.OpenGL4;
 namespace GPR202_A3.Graphics
 {
     /// <summary>
-    /// A square, single-channel float texture holding the terrain's heights, one texel per grid vertex.
-    ///
-    /// The terrain's vertex shader reads its height from here, so the heights live on the GPU instead of in a vertex
-    /// buffer. Changing a region of this texture (e.g. a crater) changes the terrain's shape and lighting
-    /// straight away, without rebuilding any mesh.
+    /// A square float texture holding the terrain's heights, one texel per grid vertex.
+    /// The terrain's vertex shader reads its heights from here, and UpdateRegion changes part of it (e.g. a crater).
     /// </summary>
     internal class HeightMapTexture : IGraphicsResources
     {
@@ -45,14 +42,14 @@ namespace GPR202_A3.Graphics
             ID = GL.GenTexture();
             GL.BindTexture(TextureTarget.Texture2D, ID);
 
-            // The shader reads exact texels with texelFetch, so there is no filtering or mipmapping.
-            // Nearest also keeps the texture "complete" without mipmaps, which OpenGL requires before it can be sampled.
+            // The shader reads exact texels with texelFetch, so no filtering or mipmaps are needed.
+            // (Nearest also means OpenGL doesn't expect mipmaps before it will sample the texture.)
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
 
-            // R32F: one red channel stored as a full float, so heights keep their precision (no 0..255 stepping)
+            // R32F: one 32-bit float per texel, so heights keep their full precision
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, size, size, 0,
                 PixelFormat.Red, PixelType.Float, heights);
 
@@ -62,8 +59,7 @@ namespace GPR202_A3.Graphics
 
         #region Public API
         /// <summary>
-        /// Replaces a rectangle of heights on the GPU, e.g. after a crater changes part of the terrain.
-        /// Only the changed rectangle is uploaded, not the whole texture.
+        /// Uploads a changed rectangle of heights (only that rectangle, not the whole texture).
         /// </summary>
         /// <param name="x">The rectangle's first column.</param>
         /// <param name="z">The rectangle's first row.</param>

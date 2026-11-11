@@ -11,3 +11,8 @@ CC Attribution: https://creativecommons.org/licenses/by/4.0/
 --------- Terrain -----------
 Desert height map: generated in code (Generation/DesertGenerator.cs), no image used.
 Sand textures (Resource/Terrain/SandColor.png, SandNormal.png): generated with Tools/make_sand_textures.py.
+
+--------- Plane Metal Maps -----------
+Metal 001 (normal, metallic and roughness maps) by AmbientCG (2018)
+https://ambientcg.com/view?id=Metal001
+CC0 1.0 Universal creative commons license

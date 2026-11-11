@@ -14,6 +14,11 @@ namespace GPR202_A3.Graphics
         public const int NORMALMAPUNIT = 1;
         public const int METALLICMAPUNIT = 2;
         public const int ROUGHNESSMAPUNIT = 3;
+
+        // Colours of the default textures. White leaves a value unchanged when multiplied,
+        // and (128, 128, 255) is a normal pointing straight out of the surface (a flat normal map).
+        private const byte FULL = 255;
+        private const byte HALF = 128;
         #endregion
 
         #region Default Textures
@@ -110,13 +115,13 @@ namespace GPR202_A3.Graphics
 
             // Create the shared default textures
             if (_defaultAlbedo == null)
-                _defaultAlbedo = new Texture(255, 255, 255, ALBEDOMAPUNIT);
+                _defaultAlbedo = new Texture(FULL, FULL, FULL, ALBEDOMAPUNIT);
             if (_defaultNormal == null)
-                _defaultNormal = new Texture(128, 128, 255, NORMALMAPUNIT);
+                _defaultNormal = new Texture(HALF, HALF, FULL, NORMALMAPUNIT);
             if (_defaultMetallic == null)
-                _defaultMetallic = new Texture(255, 255, 255, METALLICMAPUNIT);
+                _defaultMetallic = new Texture(FULL, FULL, FULL, METALLICMAPUNIT);
             if (_defaultRoughness == null)
-                _defaultRoughness = new Texture(255, 255, 255, ROUGHNESSMAPUNIT);
+                _defaultRoughness = new Texture(FULL, FULL, FULL, ROUGHNESSMAPUNIT);
 
             // Each texture binds to the unit it was created for
             BindOrDefault(AlbedoMap, _defaultAlbedo);

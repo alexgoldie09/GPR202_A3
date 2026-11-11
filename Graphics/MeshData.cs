@@ -10,6 +10,18 @@ namespace GPR202_A3.Graphics
     /// </summary>
     internal class MeshData
     {
+        #region Constants
+        // Below this, a triangle's UVs have no area, so it can't give a tangent direction
+        private const float MINUVAREA = 1e-8f;
+
+        // Below this (squared length), a summed tangent is treated as zero
+        private const float MINTANGENTLENGTHSQUARED = 1e-12f;
+
+        // If the normal is closer than this to straight up, X is used to build the fallback tangent instead of Y
+        // (crossing two almost-parallel vectors gives a tiny, unreliable result)
+        private const float NEARLYVERTICAL = 0.99f;
+        #endregion
+
         #region Public Fields
         /// <summary>
         /// Vertex positions in the model's local space.
@@ -106,7 +118,7 @@ namespace GPR202_A3.Graphics
 
                 // A triangle whose UVs have no area can't define a direction, so it is skipped
                 float determinant = deltaUV1.X * deltaUV2.Y - deltaUV2.X * deltaUV1.Y;
-                if (MathF.Abs(determinant) < 1e-8f)
+                if (MathF.Abs(determinant) < MINUVAREA)
                     continue;
 
                 // The tangent and bitangent are scaled by the inverse of the determinant to account for the UV area
@@ -132,10 +144,10 @@ namespace GPR202_A3.Graphics
 
                 // Fallback for vertices only touched by skipped triangles: any pair of directions
                 // perpendicular to the normal (the normal map then has no meaningful orientation there)
-                if (tangent.LengthSquared < 1e-12f || bitangent.LengthSquared < 1e-12f)
+                if (tangent.LengthSquared < MINTANGENTLENGTHSQUARED || bitangent.LengthSquared < MINTANGENTLENGTHSQUARED)
                 {
                     Vector3 normal = Normals[v];
-                    Vector3 helper = MathF.Abs(normal.Y) < 0.99f ? Vector3.UnitY : Vector3.UnitX;
+                    Vector3 helper = MathF.Abs(normal.Y) < NEARLYVERTICAL ? Vector3.UnitY : Vector3.UnitX;
                     tangent = Vector3.Cross(normal, helper);
                     bitangent = Vector3.Cross(normal, tangent);
                 }
@@ -155,7 +167,7 @@ namespace GPR202_A3.Graphics
             // Check for empty mesh
             if (VertexCount == 0 || IndexCount == 0)
             {
-                DebugText.Log($"{name}: mesh is empty", Color4.Red, 8f);
+                DebugText.Log($"{name}: mesh is empty", Color4.Red, DebugText.WARNINGDURATION);
                 return false;
             }
             
@@ -163,14 +175,14 @@ namespace GPR202_A3.Graphics
             if (UVs.Count != VertexCount || Normals.Count != VertexCount)
             {
                 DebugText.Log($"{name}: attribute count mismatch " +
-                              $"(pos {VertexCount}, uv {UVs.Count}, normal {Normals.Count})", Color4.Red, 8f);
+                              $"(pos {VertexCount}, uv {UVs.Count}, normal {Normals.Count})", Color4.Red, DebugText.WARNINGDURATION);
                 return false;
             }
             
             // Check for index count being a multiple of 3
             if (IndexCount % 3 != 0)
             {
-                DebugText.Log($"{name}: index count {IndexCount} is not a multiple of 3", Color4.Red, 8f);
+                DebugText.Log($"{name}: index count {IndexCount} is not a multiple of 3", Color4.Red, DebugText.WARNINGDURATION);
                 return false;
             }
 
@@ -179,7 +191,7 @@ namespace GPR202_A3.Graphics
             {
                 if (index >= VertexCount)
                 {
-                    DebugText.Log($"{name}: index {index} is out of range (vertex count {VertexCount})", Color4.Red, 8f);
+                    DebugText.Log($"{name}: index {index} is out of range (vertex count {VertexCount})", Color4.Red, DebugText.WARNINGDURATION);
                     return false;
                 }
             }

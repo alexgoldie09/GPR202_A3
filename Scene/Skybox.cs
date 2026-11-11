@@ -19,6 +19,7 @@ namespace GPR202_A3.Scene
 
         // Shader location of the cube's corner positions
         private const int POSITIONLOCATION = 0;
+        private const int POSITIONSIZE = 3; // floats per corner (x, y, z)
 
         // The cube's 8 corners, centred on the origin.
         // The shader only uses the direction to each corner, and places the cube at the far plane.
@@ -72,7 +73,7 @@ namespace GPR202_A3.Scene
             // Positions only (no UVs or normals: the cube map is looked up by direction
             _vao = new VAO();
             _positionVbo = new VBO(Corners);
-            _vao.LinkToVao(POSITIONLOCATION, 3, _positionVbo);
+            _vao.LinkToVao(POSITIONLOCATION, POSITIONSIZE, _positionVbo);
 
             // Create the IBO while the VAO is bound so the VAO remembers it
             _vao.Bind();

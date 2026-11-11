@@ -3,11 +3,8 @@
 namespace GPR202_A3.Scene
 {
     /// <summary>
-    /// One balloon in the game: where it is, how it is spinning, and whether it has been collected.
-    /// The model itself is shared by every balloon (see Balloon).
-    ///
-    /// A collected balloon plays a short animation (it shrinks, rises and tumbles) and then reports Finished,
-    /// so the game can remove it.
+    /// One balloon: where it is, how it is spinning, and whether it has been collected.
+    /// Once collected it shrinks, rises and tumbles, then reports Finished so the game can remove it.
     /// </summary>
     internal class BalloonState
     {
@@ -15,27 +12,28 @@ namespace GPR202_A3.Scene
         private const float DEFAULTSCALE = 2f;
         private const float ROTATESPEED = 1f; // idle spin, radians per second
 
-        // Spawn height above the terrain (or the water), in units
+        // Spawn height above the ground (or the water)
         private const int MINSPAWNHEIGHT = 15;
         private const int MAXSPAWNHEIGHT = 65;
 
-        // How far in from the terrain's edges balloons may spawn, in units
+        // How far in from the terrain's edges balloons can spawn
         private const float SPAWNMARGIN = 100f;
 
-        // Collection: the plane collects a balloon when it comes within COLLECTRADIUS of the balloon's centre,
-        // which sits CENTREHEIGHT above its base (the model's origin is at the basket)
+        // The plane collects a balloon within COLLECTRADIUS of its centre.
+        // The centre is CENTREHEIGHT above the model's origin (which is at the basket).
+        // These become a proper sphere collider in Step 4.
         private const float COLLECTRADIUS = 15f;
         private const float CENTREHEIGHT = 5f;
 
         // Collection animation
-        private const float COLLECTDURATION = 0.25f; // seconds (the original animated at 4x speed over 0..1)
+        private const float COLLECTDURATION = 0.25f; // seconds (the same as the original)
         private const float RISESPEED = 64f; // units per second
         private const float TUMBLESPEED = 64f; // radians per second around X and Z
         #endregion
 
         #region Public Fields
         /// <summary>
-        /// Shared random number generator, so balloons spawned in the same frame don't get the same seed.
+        /// One random number generator shared by every balloon, so balloons spawned together don't get the same numbers.
         /// </summary>
         public static readonly Random Random = new();
 
@@ -76,18 +74,17 @@ namespace GPR202_A3.Scene
         /// </summary>
         public void Spawn()
         {
-            // A random world position, kept SPAWNMARGIN in from the edges
-            float range = Terrain.Size * 0.5f - SPAWNMARGIN;
-            float x = (float)(Random.NextDouble() * 2.0 - 1.0) * range;
-            float z = (float)(Random.NextDouble() * 2.0 - 1.0) * range;
+            // A random position, SPAWNMARGIN in from the edges
+            float range = Terrain.Size / 2f - SPAWNMARGIN;
+            float x = RandomBetween(-range, range);
+            float z = RandomBetween(-range, range);
             float height = Random.Next(MINSPAWNHEIGHT, MAXSPAWNHEIGHT);
 
             float ground = MathF.Max(Terrain.GetHeightAt(x, z), Terrain.WaterLevel);
             Position = new Vector3(x, ground + height, z);
 
-            // The original passed a whole number of degrees (0..358) straight in as radians;
-            // this picks a random angle in radians instead.
-            Rotation = new Vector3(0f, (float)(Random.NextDouble() * MathHelper.TwoPi), 0f);
+            // A random angle in radians (the original passed degrees where radians were expected)
+            Rotation = new Vector3(0f, RandomBetween(0f, MathHelper.TwoPi), 0f);
 
             Scale = DEFAULTSCALE;
             Collected = false;
@@ -126,6 +123,13 @@ namespace GPR202_A3.Scene
             if (_animate >= 1f)
                 Finished = true;
         }
+        #endregion
+
+        #region Helper Methods
+        /// <summary>
+        /// A random number between min and max.
+        /// </summary>
+        private static float RandomBetween(float min, float max) => min + (float)Random.NextDouble() * (max - min);
         #endregion
     }
 }

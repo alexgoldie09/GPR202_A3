@@ -16,6 +16,10 @@ namespace GPR202_A3.Graphics
       public const int NORMALLOCATION = 2;
       public const int TANGENTLOCATION = 3;
       public const int BITANGENTLOCATION = 4;
+
+      // Floats per value of each attribute
+      private const int VECTOR3SIZE = 3;
+      private const int VECTOR2SIZE = 2;
       #endregion
 
       #region Public Fields
@@ -63,19 +67,19 @@ namespace GPR202_A3.Graphics
 
          // One VBO per attribute, each linked to its shader location
          _positionVbo = new VBO(data.Positions);
-         _vao.LinkToVao(POSITIONLOCATION, 3, _positionVbo);
+         _vao.LinkToVao(POSITIONLOCATION, VECTOR3SIZE, _positionVbo);
 
          _uvVbo = new VBO(data.UVs);
-         _vao.LinkToVao(UVLOCATION, 2, _uvVbo);
+         _vao.LinkToVao(UVLOCATION, VECTOR2SIZE, _uvVbo);
 
          _normalVbo = new VBO(data.Normals);
-         _vao.LinkToVao(NORMALLOCATION, 3, _normalVbo);
+         _vao.LinkToVao(NORMALLOCATION, VECTOR3SIZE, _normalVbo);
 
          _tangentVbo = new VBO(data.Tangents);
-         _vao.LinkToVao(TANGENTLOCATION, 3, _tangentVbo);
+         _vao.LinkToVao(TANGENTLOCATION, VECTOR3SIZE, _tangentVbo);
 
          _bitangentVbo = new VBO(data.Bitangents);
-         _vao.LinkToVao(BITANGENTLOCATION, 3, _bitangentVbo);
+         _vao.LinkToVao(BITANGENTLOCATION, VECTOR3SIZE, _bitangentVbo);
 
          // Create the IBO while the VAO is bound so the VAO remembers it
          _vao.Bind();
@@ -86,7 +90,7 @@ namespace GPR202_A3.Graphics
 
          DebugText.Log(
             $"{name} uploaded: {data.VertexCount} vertices, {IndexCount} indices ({IndexCount / 3} triangles)",
-            Color4.LightGreen, 6f);
+            Color4.LightGreen, DebugText.INFODURATION);
          DebugText.CheckGLError($"{name} upload");
       }
       #endregion

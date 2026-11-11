@@ -11,6 +11,11 @@ namespace GPR202_A3.Graphics
     /// </summary>
     internal class CubeMap : IGraphicsResources
     {
+        #region Constants
+        // A cube map always has six faces
+        private const int FACECOUNT = 6;
+        #endregion
+
         #region Public Fields
         /// <summary>
         /// Gets the ID of the cube map texture object in OpenGL.
@@ -35,9 +40,9 @@ namespace GPR202_A3.Graphics
         {
             Unit = unit;
 
-            if (faceFiles.Length != 6)
+            if (faceFiles.Length != FACECOUNT)
             {
-                DebugText.Log($"Cube map needs 6 faces but was given {faceFiles.Length}.", Color4.Red, 6f);
+                DebugText.Log($"Cube map needs {FACECOUNT} faces but was given {faceFiles.Length}.", Color4.Red, DebugText.WARNINGDURATION);
                 return;
             }
             
@@ -74,7 +79,7 @@ namespace GPR202_A3.Graphics
 
                     if (image == null)
                     {
-                        DebugText.Log($"Failed to load cube face '{faceFiles[i]}': ImageResult is null.", Color4.Red, 6f);
+                        DebugText.Log($"Failed to load cube face '{faceFiles[i]}': ImageResult is null.", Color4.Red, DebugText.WARNINGDURATION);
                         continue;
                     }
 
@@ -83,7 +88,7 @@ namespace GPR202_A3.Graphics
 
                     if (image.Width != image.Height || image.Width != faceSize)
                         DebugText.Log($"Cube face '{faceFiles[i]}' is {image.Width}x{image.Height}; every face must be " +
-                                      $"square and {faceSize}x{faceSize}.", Color4.Red, 6f);
+                                      $"square and {faceSize}x{faceSize}.", Color4.Red, DebugText.WARNINGDURATION);
 
                     // The six face targets come one after another in OpenGL (+X, -X, +Y, -Y, +Z, -Z),
                     // so face i is uploaded to PositiveX + i
@@ -92,11 +97,11 @@ namespace GPR202_A3.Graphics
                 }
                 catch (Exception e)
                 {
-                    DebugText.Log($"Cube face '{faceFiles[i]}' failed: {e.Message}", Color4.Red, 6f);
+                    DebugText.Log($"Cube face '{faceFiles[i]}' failed: {e.Message}", Color4.Red, DebugText.WARNINGDURATION);
                 }
             }
 
-            DebugText.Log($"Loaded cube map ({faceSize}x{faceSize} faces)", Color4.LightGreen, 6f);
+            DebugText.Log($"Loaded cube map ({faceSize}x{faceSize} faces)", Color4.LightGreen, DebugText.INFODURATION);
 
             // Unbind the cube map to prevent accidental modification
             GL.BindTexture(TextureTarget.TextureCubeMap, 0);

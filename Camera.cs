@@ -3,24 +3,21 @@
 namespace GPR202_A3
 {
     /// <summary>
-    /// A chase camera that follows behind and above a target (the plane), looking slightly ahead of it.
-    ///
-    /// The camera eases towards its follow position instead of snapping to it, so turns and climbs feel smooth.
-    /// It also owns the projection settings and keeps the aspect ratio in step with the window.
+    /// A chase camera that eases into place behind and above the plane, looking a little ahead of it.
+    /// It also holds the projection settings.
     /// </summary>
     internal class Camera
     {
         #region Constants
-        // Where the camera sits relative to the target: behind it along its heading, and above it.
-        // A distance of 11 at 20 degrees above matches the original game's camera.
+        // Follow position: 11 units away, 20 degrees above (the same as the original game's camera)
         private const float FOLLOWDISTANCE = 11f;
         private const float FOLLOWANGLE = 20f; // degrees above the target
-        private const float LOOKAHEAD = 4f; // how far ahead of the target to aim, in units
+        private const float LOOKAHEAD = 4f; // how far ahead of the target to aim
         private const float FOLLOWRESPONSE = 6f; // how quickly the camera catches up (higher = tighter)
 
-        // Projection. The near plane was 0.1 in the original: with a far plane of 2000 that wastes most of the
-        // depth buffer's precision on the first few units, which causes flickering (z-fighting) in the distance.
-        // The camera is never closer than ~10 units to anything, so 0.5 loses nothing.
+        // Projection. The original near plane of 0.1 wasted depth precision and caused flickering in the distance.
+        // Nothing gets closer to the camera than about 10 units, so 0.5 loses nothing.
+        private const float DEFAULTFOV = 65f; // vertical field of view, degrees (the same as the original)
         private const float NEARPLANE = 0.5f;
         private const float FARPLANE = 2000f;
         #endregion
@@ -29,7 +26,7 @@ namespace GPR202_A3
         /// <summary>
         /// Vertical field of view, in degrees.
         /// </summary>
-        public float FOV { get; set; } = 65f;
+        public float FOV { get; set; } = DEFAULTFOV;
 
         /// <summary>
         /// Where the camera is in the world.
@@ -73,14 +70,14 @@ namespace GPR202_A3
             Vector3 desiredPosition = GetFollowPosition(targetPosition, targetForward);
             Vector3 desiredTarget = targetPosition + targetForward * LOOKAHEAD;
 
-            // Exponential smoothing: covers the same fraction of the gap per second at any frame rate
+            // Close the same fraction of the gap each second, whatever the frame rate
             float blend = 1f - MathF.Exp(-FOLLOWRESPONSE * deltaTime);
             Position = Vector3.Lerp(Position, desiredPosition, blend);
             Target = Vector3.Lerp(Target, desiredTarget, blend);
         }
 
         /// <summary>
-        /// Moves the camera straight to its place behind the target, with no easing (used when a game starts).
+        /// Moves the camera straight into place, with no easing (for the start of a game).
         /// </summary>
         /// <param name="targetPosition">The target's position.</param>
         /// <param name="targetForward">The direction the target is facing (level).</param>
@@ -91,12 +88,12 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// The view matrix: from world space to the camera's view.
+        /// The view matrix (world to camera).
         /// </summary>
         public Matrix4 GetViewMatrix() => Matrix4.LookAt(Position, Target, Vector3.UnitY);
 
         /// <summary>
-        /// The projection matrix: from the camera's view to the screen.
+        /// The projection matrix (camera to screen).
         /// </summary>
         public Matrix4 GetProjectionMatrix() =>
             Matrix4.CreatePerspectiveFieldOfView(
@@ -110,7 +107,7 @@ namespace GPR202_A3
         /// </summary>
         public void SetScreenSize(float width, float height)
         {
-            // Ignore a zero-sized window (e.g. minimised) to avoid dividing by zero
+            // A minimised window has no size; skip it to avoid dividing by zero
             if (width <= 0 || height <= 0) return;
 
             _screenWidth = width;

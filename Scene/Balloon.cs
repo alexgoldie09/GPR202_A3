@@ -5,18 +5,21 @@ using OpenTK.Mathematics;
 namespace GPR202_A3.Scene
 {
     /// <summary>
-    /// The balloon model, loaded and uploaded once and drawn for every balloon in the game.
-    ///
-    /// Each balloon's position, spin, scale and collection state live in its own BalloonState,
-    /// so eight balloons share one mesh and one texture instead of each loading their own copy.
+    /// The balloon model, loaded once and drawn for every balloon.
+    /// Each balloon's position and state are kept in its own BalloonState, so all of them share one mesh and texture.
     /// </summary>
     internal class Balloon
     {
+        #region Constants
+        // Balloon fabric is matte, so only a faint highlight
+        private const float ROUGHNESS = 0.9f;
+        #endregion
+
         #region Private Fields
         // The shared part (mesh and material) every balloon is drawn with
         private readonly ModelPart _part;
 
-        // GPU resources this class owns, deleted exactly once in Delete()
+        // GPU resources this class owns, deleted in Delete()
         private readonly Mesh _mesh;
         private readonly Texture _texture;
         #endregion
@@ -29,19 +32,19 @@ namespace GPR202_A3.Scene
         {
             _texture = new Texture("Model/balloon.png", Material.ALBEDOMAPUNIT);
 
-            // The balloon never moves its parts separately, so the whole file is merged into one mesh
+            // The balloon's parts never move separately, so it is loaded as one mesh
             _mesh = new Mesh(ModelLoader.Load("Model/balloon.obj"), "Balloon");
 
             _part = new ModelPart("Balloon", _mesh)
             {
-                Material = new Material { AlbedoMap = _texture, Roughness = 0.9f }
+                Material = new Material { AlbedoMap = _texture, Roughness = ROUGHNESS }
             };
         }
         #endregion
 
         #region Public API
         /// <summary>
-        /// Draws one balloon with the model shader, using that balloon's position, rotation and scale.
+        /// Draws one balloon with the model shader, at that balloon's position, rotation and scale.
         /// </summary>
         /// <param name="shader">The bound model shader.</param>
         /// <param name="state">The balloon to draw.</param>

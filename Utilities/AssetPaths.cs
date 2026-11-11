@@ -1,11 +1,8 @@
 namespace GPR202_A3.Utilities
 {
     /// <summary>
-    /// Builds full paths to the game's asset files, starting from the folder the executable runs from.
-    ///
-    /// The .csproj copies the Shaders and Resource folders next to the compiled executable, so loading from
-    /// AppContext.BaseDirectory works whether the game is started from the IDE, with `dotnet run`,
-    /// or by double-clicking the .exe in bin/ (as submitted).
+    /// Builds full paths to asset files, from the folder the executable runs from.
+    /// The .csproj copies Shaders and Resource next to the executable, so this works from the IDE or the .exe.
     /// </summary>
     internal static class AssetPaths
     {
