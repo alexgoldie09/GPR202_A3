@@ -16,6 +16,7 @@ uniform mat4 model; // Model matrix (object to world)
 uniform mat4 view; // View matrix (world to camera)
 uniform mat4 projection; // Projection matrix (camera to clip space)
 uniform mat3 normalMatrix; // Inverse-transpose of the model matrix, so normals stay perpendicular under non-uniform scale
+uniform vec4 clipPlane; // Water passes: anything on the negative side of this plane is cut away (ignored when clipping is off)
 
 void main()
 {
@@ -30,6 +31,9 @@ void main()
     // (w = 0: they are directions, so the translation is ignored)
     WorldTangent = (vec4(aTangent, 0.0) * model).xyz;
     WorldBitangent = (vec4(aBitangent, 0.0) * model).xyz;
+
+    // Distance from the clip plane: negative = cut away (only when GL_CLIP_DISTANCE0 is enabled)
+    gl_ClipDistance[0] = dot(worldPos, clipPlane);
 
     gl_Position = worldPos * view * projection;
 }

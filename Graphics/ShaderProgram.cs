@@ -103,6 +103,20 @@ namespace GPR202_A3.Graphics
         public void SetVector3(string name, Vector3 value) => GL.Uniform3(GetLocation(name), value);
 
         /// <summary>
+        /// Sets a 4-component vector uniform variable in the shader program (e.g. a clip plane).
+        /// </summary>
+        /// <param name="name">The name of the uniform variable in the shader.</param>
+        /// <param name="value">The vector to set.</param>
+        public void SetVector4(string name, Vector4 value) => GL.Uniform4(GetLocation(name), value);
+
+        /// <summary>
+        /// Sets a 2-component vector uniform variable in the shader program (e.g. a texture offset).
+        /// </summary>
+        /// <param name="name">The name of the uniform variable in the shader.</param>
+        /// <param name="value">The vector to set.</param>
+        public void SetVector2(string name, Vector2 value) => GL.Uniform2(GetLocation(name), value);
+
+        /// <summary>
         /// Sets a float uniform variable in the shader program (e.g. a reflectivity amount).
         /// </summary>
         /// <param name="name">The name of the uniform variable in the shader.</param>

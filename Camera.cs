@@ -37,6 +37,16 @@ namespace GPR202_A3
         /// The point the camera is looking at.
         /// </summary>
         public Vector3 Target { get; private set; }
+
+        /// <summary>
+        /// Distance to the near clipping plane.
+        /// </summary>
+        public float NearPlane => NEARPLANE;
+
+        /// <summary>
+        /// Distance to the far clipping plane.
+        /// </summary>
+        public float FarPlane => FARPLANE;
         #endregion
 
         #region Private Fields
@@ -93,6 +103,20 @@ namespace GPR202_A3
         public Matrix4 GetViewMatrix() => Matrix4.LookAt(Position, Target, Vector3.UnitY);
 
         /// <summary>
+        /// The camera mirrored below a water surface, for drawing the reflection.
+        /// </summary>
+        /// <param name="waterHeight">Height of the water surface.</param>
+        public Vector3 GetReflectionPosition(float waterHeight) => Mirror(Position, waterHeight);
+
+        /// <summary>
+        /// The view from the mirrored camera, looking at the mirrored target. The picture comes out upside down,
+        /// which the water shader undoes by flipping the texture.
+        /// </summary>
+        /// <param name="waterHeight">Height of the water surface.</param>
+        public Matrix4 GetReflectionViewMatrix(float waterHeight) =>
+            Matrix4.LookAt(Mirror(Position, waterHeight), Mirror(Target, waterHeight), Vector3.UnitY);
+
+        /// <summary>
         /// The projection matrix (camera to screen).
         /// </summary>
         public Matrix4 GetProjectionMatrix() =>
@@ -116,6 +140,11 @@ namespace GPR202_A3
         #endregion
 
         #region Helper Methods
+        /// <summary>
+        /// A point mirrored across a horizontal plane at the given height (as far below it as it was above).
+        /// </summary>
+        private static Vector3 Mirror(Vector3 point, float height) => new(point.X, 2f * height - point.Y, point.Z);
+
         /// <summary>
         /// The point FOLLOWDISTANCE away from the target, behind it and FOLLOWANGLE degrees above.
         /// </summary>

@@ -12,6 +12,7 @@ uniform float GridSpacing; // world units between vertices
 
 uniform mat4 view; // world to camera
 uniform mat4 projection; // camera to clip space
+uniform vec4 clipPlane; // water passes: anything on the negative side is cut away (ignored when clipping is off)
 
 // Height of vertex (x, z). Positions past the edge are clamped to it.
 float HeightAt(int x, int z)
@@ -38,5 +39,6 @@ void main()
     WorldNormal = normalize(vec3(left - right, 2.0 * GridSpacing, down - up));
 
     // Row-vector convention (matrices uploaded transposed). No model matrix: the terrain is already in world space.
+    gl_ClipDistance[0] = dot(vec4(WorldPos, 1.0), clipPlane);
     gl_Position = vec4(WorldPos, 1.0) * view * projection;
 }

@@ -103,6 +103,58 @@ namespace GPR202_A3.Generation
 
             return sum / total;
         }
+
+        /// <summary>
+        /// Like Sample, but repeats every 'period' units in x and y, so textures made from it tile without a seam.
+        /// </summary>
+        /// <param name="period">How often the noise repeats. Must be a power of 2, up to 256.</param>
+        public float SamplePeriodic(float x, float y, int period)
+        {
+            int cellX = (int)MathF.Floor(x);
+            int cellY = (int)MathF.Floor(y);
+            float fx = x - cellX;
+            float fy = y - cellY;
+
+            // Wrap every corner by the period (not the table size), so the cells after the last one are the first ones again
+            int mask = period - 1;
+            int x0 = cellX & mask;
+            int y0 = cellY & mask;
+            int x1 = (cellX + 1) & mask;
+            int y1 = (cellY + 1) & mask;
+
+            float g00 = Gradient(_permutation[_permutation[x0] + y0], fx, fy);
+            float g10 = Gradient(_permutation[_permutation[x1] + y0], fx - 1f, fy);
+            float g01 = Gradient(_permutation[_permutation[x0] + y1], fx, fy - 1f);
+            float g11 = Gradient(_permutation[_permutation[x1] + y1], fx - 1f, fy - 1f);
+
+            float u = Fade(fx);
+            float v = Fade(fy);
+            return Lerp(Lerp(g00, g10, u), Lerp(g01, g11, u), v);
+        }
+
+        /// <summary>
+        /// Like Fbm, but repeats every 'period' units. Each layer doubles the period along with the detail,
+        /// so period * 2^(octaves - 1) must be 256 or less.
+        /// </summary>
+        public float FbmPeriodic(float x, float y, int octaves, int period)
+        {
+            float sum = 0f;
+            float amplitude = 1f;
+            float frequency = 1f;
+            float total = 0f;
+            int layerPeriod = period;
+
+            for (int i = 0; i < octaves; i++)
+            {
+                sum += SamplePeriodic(x * frequency, y * frequency, layerPeriod) * amplitude;
+                total += amplitude;
+                amplitude *= GAIN;
+                frequency *= LACUNARITY;
+                layerPeriod *= (int)LACUNARITY;
+            }
+
+            return sum / total;
+        }
         #endregion
 
         #region Helper Methods

@@ -94,6 +94,12 @@ namespace GPR202_A3.Scene
         private readonly VAO _vao;
         private readonly IBO _ibo;
         private readonly int _indexCount;
+
+        // A smaller square of the grid that can be drawn on its own (e.g. only the area under the water).
+        // It has its own index buffer, but uses the same height texture and shader.
+        private VAO? _patchVao;
+        private IBO? _patchIbo;
+        private int _patchIndexCount;
         #endregion
 
         #region Constructors
@@ -111,7 +117,7 @@ namespace GPR202_A3.Scene
 
             // --- Indices only ---
             // The VAO has no vertex attributes, but core OpenGL still needs one bound to draw, and it remembers the IBO
-            List<uint> indices = BuildStripIndices();
+            List<uint> indices = BuildStripIndices(0, GRIDSIZE - 1, 0, GRIDSIZE - 1);
             _vao = new VAO(); // binds itself, so the IBO below is stored in it
             _ibo = new IBO(indices);
             _vao.Unbind();
@@ -219,6 +225,30 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
+        /// Sets up the patch: a square of the terrain that Render can draw on its own, instead of the whole grid.
+        /// The water's refraction pass uses it, since it only ever sees the terrain under the water.
+        /// </summary>
+        /// <param name="centre">The square's centre in world x and z.</param>
+        /// <param name="halfSize">Half the square's width, in world units.</param>
+        public void CreatePatch(Vector2 centre, float halfSize)
+        {
+            _patchVao?.Delete();
+            _patchIbo?.Delete();
+
+            List<uint> indices = BuildStripIndices(
+                WorldToGrid(centre.X - halfSize, MathF.Floor), WorldToGrid(centre.X + halfSize, MathF.Ceiling),
+                WorldToGrid(centre.Y - halfSize, MathF.Floor), WorldToGrid(centre.Y + halfSize, MathF.Ceiling));
+
+            _patchVao = new VAO(); // binds itself, so the IBO below is stored in it
+            _patchIbo = new IBO(indices);
+            _patchVao.Unbind();
+            _patchIndexCount = indices.Count;
+
+            DebugText.Log($"Terrain patch: {_patchIndexCount} indices ({100.0 * _patchIndexCount / _indexCount:0.0}% of the grid)",
+                Color4.LightGreen, DebugText.INFODURATION);
+        }
+
+        /// <summary>
         /// Uploads the sunlight settings. Call once on load.
         /// </summary>
         public void SetLighting(Vector3 lightDirection, Vector3 lightColor, float ambientStrength)
@@ -242,12 +272,15 @@ namespace GPR202_A3.Scene
         /// Draws the terrain.
         /// </summary>
         /// <param name="view">The camera's view matrix.</param>
+        /// <param name="clipPlane">The water pass's clip plane (only used while clipping is enabled).</param>
         /// <param name="debugView">The current debug view.</param>
         /// <param name="useLighting">Whether to light the terrain.</param>
-        public void Render(Matrix4 view, DebugView debugView, bool useLighting)
+        /// <param name="patchOnly">true to draw only the patch (see CreatePatch), if there is one.</param>
+        public void Render(Matrix4 view, Vector4 clipPlane, DebugView debugView, bool useLighting, bool patchOnly = false)
         {
             _shader.Bind();
             _shader.SetMatrix4("view", view);
+            _shader.SetVector4("clipPlane", clipPlane);
             _shader.SetInt("DebugView", (int)debugView);
             _shader.SetInt("UseLighting", useLighting ? 1 : 0);
 
@@ -259,9 +292,18 @@ namespace GPR202_A3.Scene
             GL.Enable(EnableCap.PrimitiveRestart);
             GL.PrimitiveRestartIndex(RESTARTINDEX);
 
-            _vao.Bind();
-            GL.DrawElements(PrimitiveType.TriangleStrip, _indexCount, DrawElementsType.UnsignedInt, 0);
-            _vao.Unbind();
+            // The whole grid, or just the patch
+            VAO vao = _vao;
+            int indexCount = _indexCount;
+            if (patchOnly && _patchVao != null)
+            {
+                vao = _patchVao;
+                indexCount = _patchIndexCount;
+            }
+
+            vao.Bind();
+            GL.DrawElements(PrimitiveType.TriangleStrip, indexCount, DrawElementsType.UnsignedInt, 0);
+            vao.Unbind();
 
             GL.Disable(EnableCap.PrimitiveRestart);
         }
@@ -277,23 +319,30 @@ namespace GPR202_A3.Scene
             _sandNormal.Delete();
             _vao.Delete();
             _ibo.Delete();
+            _patchVao?.Delete();
+            _patchIbo?.Delete();
         }
         #endregion
 
         #region Helper Methods
         /// <summary>
-        /// Builds one triangle strip per row of the grid, separated by restart indices.
+        /// Builds one triangle strip per row of a rectangle of the grid, separated by restart indices.
         /// A strip zig-zags between two rows: (x, z), (x, z + 1), (x + 1, z), ... so each grid square costs
         /// 2 indices instead of 6. Starting on row z makes the triangles face up (counter-clockwise from above).
         /// </summary>
-        private static List<uint> BuildStripIndices()
+        /// <param name="minX">First column.</param>
+        /// <param name="maxX">Last column.</param>
+        /// <param name="minZ">First row.</param>
+        /// <param name="maxZ">Last row.</param>
+        private static List<uint> BuildStripIndices(int minX, int maxX, int minZ, int maxZ)
         {
             // Each row: 2 indices per column, plus 1 restart index
-            var indices = new List<uint>((GRIDSIZE - 1) * (2 * GRIDSIZE + 1));
+            int columns = maxX - minX + 1;
+            var indices = new List<uint>((maxZ - minZ) * (2 * columns + 1));
 
-            for (int z = 0; z < GRIDSIZE - 1; z++)
+            for (int z = minZ; z < maxZ; z++)
             {
-                for (int x = 0; x < GRIDSIZE; x++)
+                for (int x = minX; x <= maxX; x++)
                 {
                     // Vertex (x, z) is number z * GRIDSIZE + x; the vertex shader turns it back into x and z
                     indices.Add((uint)(z * GRIDSIZE + x));

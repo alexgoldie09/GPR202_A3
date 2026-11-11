@@ -127,6 +127,34 @@ namespace GPR202_A3.Graphics
 
             GL.BindTexture(TextureTarget.Texture2D, 0);
         }
+
+        /// <summary>
+        /// Constructor that creates a tiling, mipmapped texture from pixels made in code (e.g. the water's normal map).
+        /// </summary>
+        /// <param name="pixels">width * height RGBA pixels, row by row.</param>
+        /// <param name="width">Width in pixels.</param>
+        /// <param name="height">Height in pixels.</param>
+        /// <param name="unit">The texture unit this texture always binds to.</param>
+        public Texture(byte[] pixels, int width, int height, int unit)
+        {
+            Unit = unit;
+
+            GL.ActiveTexture(TextureUnit.Texture0);
+            ID = GL.GenTexture();
+            GL.BindTexture(TextureTarget.Texture2D, ID);
+
+            // Repeat so it tiles, and trilinear filtering like the file constructor
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.Repeat);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.Repeat);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, width, height, 0,
+                PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+            GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
+
+            GL.BindTexture(TextureTarget.Texture2D, 0);
+        }
         #endregion
 
         #region IGraphicsResources Functions
