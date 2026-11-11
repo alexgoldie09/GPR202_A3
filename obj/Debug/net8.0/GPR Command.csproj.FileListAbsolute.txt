@@ -1,0 +1,51 @@
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.csproj.AssemblyReference.cache
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.GeneratedMSBuildEditorConfig.editorconfig
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.AssemblyInfoInputs.cache
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.AssemblyInfo.cs
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.csproj.CoreCompileInputs.cache
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\GPR Command.exe
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\GPR Command.deps.json
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\GPR Command.runtimeconfig.json
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\GPR Command.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\GPR Command.pdb
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Audio.OpenAL.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Compute.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Core.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Graphics.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Input.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Mathematics.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Windowing.Common.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Windowing.Desktop.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\OpenTK.Windowing.GraphicsLibraryFramework.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\StbImageSharp.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\linux-x64\native\libglfw-wayland.so.3.3
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\linux-x64\native\libglfw.so.3.3
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\osx-arm64\native\libglfw.3.dylib
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\osx-x64\native\libglfw.3.dylib
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\win-x64\native\glfw3.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\win-x86\native\glfw3.dll
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Comm.B5361A32.Up2Date
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.dll
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\refint\GPR Command.dll
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.pdb
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\GPR Command.genruntimeconfig.cache
+D:\VisualStudio Projects\GPR Command\obj\Debug\net8.0\ref\GPR Command.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Skybox\back.jpg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Skybox\bottom.jpg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Skybox\front.jpg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Skybox\left.jpg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Skybox\right.jpg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Skybox\top.jpg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Model\plane.mtl
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Model\plane.obj
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\AssimpNet.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\linux-x64\native\libassimp.so
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\osx-x64\native\libassimp.dylib
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\win-x64\native\assimp.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\runtimes\win-x86\native\assimp.dll
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Model\BodyTexture.jpeg
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Terrain\heightmap.png
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Terrain\diffuse.png
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Model\balloon.mtl
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Model\balloon.obj
+D:\VisualStudio Projects\GPR Command\bin\Debug\net8.0\Resource\Model\balloon.png

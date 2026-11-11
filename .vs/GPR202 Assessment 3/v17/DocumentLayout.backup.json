@@ -1,0 +1,166 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\VisualStudio Projects\\GPR202_A3\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\camera.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:camera.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\skybox.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:skybox.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\terrain.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:terrain.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\gameobject.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:gameobject.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\plane.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:plane.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\balloon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:balloon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\balloonstate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:balloonstate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|d:\\visualstudio projects\\gpr202_a3\\game.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F89E075-2263-4732-8309-AECD73FDE297}|GPR202 A3.csproj|solutionrelative:game.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 8,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "Game.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Game.cs",
+              "RelativeDocumentMoniker": "Game.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Game.cs",
+              "RelativeToolTip": "Game.cs",
+              "ViewState": "AgIAAGsAAAAAAAAAAAAQwIsAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T03:40:34.269Z",
+              "IsPinned": true
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "BalloonState.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\BalloonState.cs",
+              "RelativeDocumentMoniker": "BalloonState.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\BalloonState.cs",
+              "RelativeToolTip": "BalloonState.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAsAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-13T08:25:59.719Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Balloon.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Balloon.cs",
+              "RelativeDocumentMoniker": "Balloon.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Balloon.cs",
+              "RelativeToolTip": "Balloon.cs",
+              "ViewState": "AgIAABIAAAAAAAAAAAAAAEkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T16:23:39.367Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Plane.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Plane.cs",
+              "RelativeDocumentMoniker": "Plane.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Plane.cs",
+              "RelativeToolTip": "Plane.cs",
+              "ViewState": "AgIAANcAAAAAAAAAAAAswPAAAAArAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T06:14:25.695Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "GameObject.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\GameObject.cs",
+              "RelativeDocumentMoniker": "GameObject.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\GameObject.cs",
+              "RelativeToolTip": "GameObject.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAkAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T13:00:37.539Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Terrain.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Terrain.cs",
+              "RelativeDocumentMoniker": "Terrain.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Terrain.cs",
+              "RelativeToolTip": "Terrain.cs",
+              "ViewState": "AgIAAMcAAAAAAAAAAAAcwBMBAABJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T12:55:36.007Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Skybox.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Skybox.cs",
+              "RelativeDocumentMoniker": "Skybox.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Skybox.cs",
+              "RelativeToolTip": "Skybox.cs",
+              "ViewState": "AgIAAKoAAAAAAAAAAAAIwGsAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T03:43:59.075Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Camera.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Camera.cs",
+              "RelativeDocumentMoniker": "Camera.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Camera.cs",
+              "RelativeToolTip": "Camera.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAAFcAAAB0AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T03:41:23.879Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\VisualStudio Projects\\GPR202_A3\\Program.cs",
+              "RelativeDocumentMoniker": "Program.cs",
+              "ToolTip": "D:\\VisualStudio Projects\\GPR202_A3\\Program.cs",
+              "RelativeToolTip": "Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-11-12T03:37:08.13Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
