@@ -23,6 +23,16 @@ namespace GPR202_A3
 
         // How high above the centre of the terrain the plane starts, in units
         private const float STARTHEIGHT = 60f;
+
+        // Sunlight, shared by every lit shader. The direction is the way the light travels: from the sun in the
+        // skybox's left (-X) face, about 24 degrees above the horizon, towards the scene.
+        private static readonly Vector3 SunDirection = new(1f, -0.45f, -0.37f);
+        private static readonly Vector3 SunColor = new(1f, 0.95f, 0.85f); // warm desert sunlight
+        private const float AMBIENTSTRENGTH = 0.45f;
+
+        // Debug crater (F5) size, in world units. Later steps make craters from crashes and missiles instead.
+        private const float CRATERRADIUS = 18f;
+        private const float CRATERDEPTH = 8f;
         #endregion
 
         #region Private Fields
@@ -107,9 +117,9 @@ namespace GPR202_A3
             // Uniforms keep their value until changed, so values that stay the same for the whole run are uploaded once.
             _modelShader = new ShaderProgram("Model.vert", "Model.frag");
             _modelShader.Bind();
-            _modelShader.SetVector3("lightDir", new Vector3(-0.4f, -1f, -0.3f)); // sun from above, a little to one side
-            _modelShader.SetVector3("lightColor", new Vector3(1f, 0.97f, 0.9f)); // warm daylight
-            _modelShader.SetFloat("ambientStrength", 0.5f);
+            _modelShader.SetVector3("lightDir", SunDirection);
+            _modelShader.SetVector3("lightColor", SunColor);
+            _modelShader.SetFloat("ambientStrength", AMBIENTSTRENGTH);
             _modelShader.SetInt("AlbedoMap", Material.ALBEDOMAPUNIT);
             _modelShader.SetInt("NormalMap", Material.NORMALMAPUNIT);
             _modelShader.SetInt("MetallicMap", Material.METALLICMAPUNIT);
@@ -121,6 +131,7 @@ namespace GPR202_A3
             _skybox = new Skybox(["Skybox/right.jpg", "Skybox/left.jpg", "Skybox/top.jpg",
                                   "Skybox/bottom.jpg", "Skybox/front.jpg", "Skybox/back.jpg"]);
             _terrain = new Terrain(); // before anything that is placed on the terrain
+            _terrain.SetLighting(SunDirection, SunColor, AMBIENTSTRENGTH);
             _plane = new Plane(GetStartPosition());
             _balloonModel = new Balloon();
 
@@ -247,7 +258,7 @@ namespace GPR202_A3
 
                 // --- Terrain ---
                 // Drawn after the small models, so the depth test skips terrain pixels hidden behind them
-                _terrain?.Render(view, _debugView);
+                _terrain?.Render(view, _debugView, _useLighting);
 
                 // Back to filled polygons, so the sky and debug text aren't drawn as lines
                 GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
@@ -318,10 +329,13 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// The plane's starting point: above the middle of the terrain.
+        /// The plane's starting point: above the oasis in the middle of the terrain.
         /// </summary>
-        private static Vector3 GetStartPosition() =>
-            Terrain.WorldPositionFromHeightMap(Terrain.Width / 2, Terrain.Length / 2) + Vector3.UnitY * STARTHEIGHT;
+        private static Vector3 GetStartPosition()
+        {
+            float ground = MathF.Max(Terrain.GetHeightAt(0f, 0f), Terrain.WaterLevel);
+            return new Vector3(0f, ground + STARTHEIGHT, 0f);
+        }
 
         /// <summary>
         /// Debug toggles on the function keys, so the gameplay keys stay free.
@@ -352,6 +366,10 @@ namespace GPR202_A3
                 _useVSync = !_useVSync;
                 VSync = _useVSync ? VSyncMode.On : VSyncMode.Off;
             }
+
+            // F5: blast a crater into the terrain under the plane (shows the height map changing at runtime)
+            if (kb.IsKeyPressed(Keys.F5) && _plane != null && _terrain != null)
+                _terrain.AddCrater(_plane.Position, CRATERRADIUS, CRATERDEPTH);
         }
 
         /// <summary>
@@ -365,7 +383,7 @@ namespace GPR202_A3
             DebugText.Log($"Load: {_loadMs:0} ms", Color4.White, 0.5f, key: 2);
             DebugText.Log($"Balloons remaining: {_balloonsLeft}", Color4.DarkGreen, 0.5f, key: 3);
             DebugText.Log($"F1 Debug View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
-                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}  Esc: Quit",
+                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}  F5 Crater  Esc: Quit",
                 Color4.DarkMagenta, 0.5f, key: 4);
         }
 

@@ -15,9 +15,12 @@ namespace GPR202_A3.Scene
         private const float DEFAULTSCALE = 2f;
         private const float ROTATESPEED = 1f; // idle spin, radians per second
 
-        // Spawn height above the terrain, in units
+        // Spawn height above the terrain (or the water), in units
         private const int MINSPAWNHEIGHT = 15;
         private const int MAXSPAWNHEIGHT = 65;
+
+        // How far in from the terrain's edges balloons may spawn, in units
+        private const float SPAWNMARGIN = 100f;
 
         // Collection: the plane collects a balloon when it comes within COLLECTRADIUS of the balloon's centre,
         // which sits CENTREHEIGHT above its base (the model's origin is at the basket)
@@ -69,15 +72,18 @@ namespace GPR202_A3.Scene
 
         #region Public API
         /// <summary>
-        /// Resets the balloon and places it at a random spot above the terrain.
+        /// Resets the balloon and places it at a random spot above the terrain (or above the water, over the oasis).
         /// </summary>
         public void Spawn()
         {
-            int x = Random.Next(0, Terrain.Width);
-            int z = Random.Next(0, Terrain.Length);
+            // A random world position, kept SPAWNMARGIN in from the edges
+            float range = Terrain.Size * 0.5f - SPAWNMARGIN;
+            float x = (float)(Random.NextDouble() * 2.0 - 1.0) * range;
+            float z = (float)(Random.NextDouble() * 2.0 - 1.0) * range;
             float height = Random.Next(MINSPAWNHEIGHT, MAXSPAWNHEIGHT);
 
-            Position = Terrain.WorldPositionFromHeightMap(x, z) + new Vector3(0f, height, 0f);
+            float ground = MathF.Max(Terrain.GetHeightAt(x, z), Terrain.WaterLevel);
+            Position = new Vector3(x, ground + height, z);
 
             // The original passed a whole number of degrees (0..358) straight in as radians;
             // this picks a random angle in radians instead.
