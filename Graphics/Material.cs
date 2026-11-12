@@ -1,3 +1,4 @@
+using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 
 namespace GPR202_A3.Graphics
@@ -32,6 +33,9 @@ namespace GPR202_A3.Graphics
         #region Redundant State Tracking
         // The material applied most recently.
         private static Material? _lastApplied;
+
+        // The shader it was applied to (the plane and the props use different shaders)
+        private static ShaderProgram? _lastShader;
 
         /// <summary>
         /// How many materials were actually applied (bound and uploaded) since the last reset.
@@ -94,6 +98,22 @@ namespace GPR202_A3.Graphics
         /// How many times the detail maps repeat across the surface. 1 = as authored, 2 = twice as many repeats, etc.
         /// </summary>
         public float DetailScale { get; set; } = 1f;
+
+        /// <summary>
+        /// Pixels whose albedo alpha is below this are thrown away (alpha cutout, e.g. leaves). 0 = off.
+        /// </summary>
+        public float AlphaCutoff { get; set; } = 0f;
+
+        /// <summary>
+        /// Draw both sides of each triangle (for flat, single-sided geometry like leaves).
+        /// </summary>
+        public bool DoubleSided { get; set; }
+
+        /// <summary>
+        /// Whether backface culling is on for everything else (the F3 toggle). Double-sided materials turn it off
+        /// while they draw, and RestoreCulling puts it back.
+        /// </summary>
+        public static bool CullingEnabled { get; set; } = true;
         #endregion
 
         #region Public API
@@ -103,14 +123,15 @@ namespace GPR202_A3.Graphics
         /// <param name="shader">The bound model shader.</param>
         public void Apply(ShaderProgram shader)
         {
-            // Skip redundant applies: if the last applied material is this one, nothing needs to change.
-            if (_lastApplied == this)
+            // Skip redundant applies: if the last applied material is this one (with the same shader), nothing needs to change.
+            if (_lastApplied == this && _lastShader == shader)
             {
                 SkippedCount++;
                 return;
             }
 
             _lastApplied = this;
+            _lastShader = shader;
             AppliedCount++;
 
             // Create the shared default textures
@@ -135,6 +156,24 @@ namespace GPR202_A3.Graphics
             shader.SetFloat("roughnessFactor", Roughness);
             shader.SetFloat("normalStrength", NormalStrength);
             shader.SetFloat("detailScale", DetailScale);
+            shader.SetFloat("alphaCutoff", AlphaCutoff);
+
+            // Leaves are flat planes, so both sides have to be drawn
+            if (DoubleSided)
+                GL.Disable(EnableCap.CullFace);
+            else
+                RestoreCulling();
+        }
+
+        /// <summary>
+        /// Puts backface culling back to the F3 setting (after a double-sided material turned it off).
+        /// </summary>
+        public static void RestoreCulling()
+        {
+            if (CullingEnabled)
+                GL.Enable(EnableCap.CullFace);
+            else
+                GL.Disable(EnableCap.CullFace);
         }
 
         /// <summary>
@@ -143,6 +182,7 @@ namespace GPR202_A3.Graphics
         public static void ResetLastApplied()
         {
             _lastApplied = null;
+            _lastShader = null;
             AppliedCount = 0;
             SkippedCount = 0;
         }

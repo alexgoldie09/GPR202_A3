@@ -82,6 +82,36 @@ namespace GPR202_A3.Loading
 
             return merged;
         }
+
+        /// <summary>
+        /// Loads a model file as one MeshData per material, keyed by the material's name (as named in Blender).
+        /// For props whose parts never move: every mesh with the same material is merged, so each material
+        /// is one draw call (the palm's two leaf objects both use "Leaf", so they become one mesh).
+        /// </summary>
+        /// <param name="relativePath">The model file, relative to the Resource folder. Its .mtl file must be next to it.</param>
+        /// <returns>One MeshData per material, or none if the file failed to load.</returns>
+        public static Dictionary<string, MeshData> LoadByMaterial(string relativePath)
+        {
+            var byMaterial = new Dictionary<string, MeshData>();
+            AssimpScene? scene = Import(relativePath);
+            if (scene == null)
+                return byMaterial;
+
+            foreach (AssimpMesh mesh in scene.Meshes)
+            {
+                string materialName = scene.Materials[mesh.MaterialIndex].Name;
+                if (!byMaterial.TryGetValue(materialName, out MeshData? data))
+                {
+                    data = new MeshData();
+                    byMaterial[materialName] = data;
+                }
+
+                AppendMesh(data, mesh);
+            }
+
+            DebugText.Log($"{relativePath}: materials [{string.Join(", ", byMaterial.Keys)}]", Color4.LightGreen, DebugText.INFODURATION);
+            return byMaterial;
+        }
         #endregion
 
         #region Helper Methods

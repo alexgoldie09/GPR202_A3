@@ -16,3 +16,13 @@ Sand textures (Resource/Terrain/SandColor.png, SandNormal.png): generated with T
 Metal 001 (normal, metallic and roughness maps) by AmbientCG (2018)
 https://ambientcg.com/view?id=Metal001
 CC0 1.0 Universal creative commons license
+
+--------- Props (rocks and palm tree) -----------
+RockOne, RockTwo and PalmTree models: made in Blender for this project.
+Rock textures (Resource/Props/RockColour.jpg, RockNormalGL.jpg, RockRoughness.jpg):
+Rocks 016 by AmbientCG
+https://ambientcg.com/view?id=Rocks016
+CC0 1.0 Universal creative commons license
+Palm textures (Resource/Props/PalmBarkColour.png, PalmTopColour.png, leaf colour image): TODO add source and licence
+Resource/Props/PalmLeaf.png: the leaf colour image with a transparency mask made by Tools/make_leaf_texture.py
+Prop placement: generated in code (Generation/PropScatter.cs), nothing placed by hand.

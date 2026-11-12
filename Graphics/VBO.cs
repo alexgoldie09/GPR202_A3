@@ -9,6 +9,11 @@ namespace GPR202_A3.Graphics
     /// </summary>
     internal class VBO : IGraphicsResources
     {
+        #region Constants
+        // Bytes in a 4x4 float matrix
+        private const int MATRIXBYTES = 16 * sizeof(float);
+        #endregion
+
         #region Public Fields
         /// <summary>
         /// Gets the ID of the Vertex Buffer Object (VBO).
@@ -41,6 +46,17 @@ namespace GPR202_A3.Graphics
             ID = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ArrayBuffer, ID);
             GL.BufferData(BufferTarget.ArrayBuffer, data.Count * Vector2.SizeInBytes, data.ToArray(), BufferUsageHint.StaticDraw);
+        }
+
+        /// <summary>
+        /// Constructor that uploads a list of matrices (e.g. one per instance of a mesh).
+        /// </summary>
+        /// <param name="data">The matrices.</param>
+        public VBO(List<Matrix4> data)
+        {
+            ID = GL.GenBuffer();
+            GL.BindBuffer(BufferTarget.ArrayBuffer, ID);
+            GL.BufferData(BufferTarget.ArrayBuffer, data.Count * MATRIXBYTES, data.ToArray(), BufferUsageHint.StaticDraw);
         }
         #endregion
         

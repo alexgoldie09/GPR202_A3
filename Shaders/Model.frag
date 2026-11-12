@@ -36,6 +36,7 @@ uniform float metallicFactor; // 0 = non-metal, 1 = metal
 uniform float roughnessFactor; // 0 = mirror smooth, 1 = fully matte
 uniform float normalStrength; // 0 = flat, 1 = normal map as authored
 uniform float detailScale; // how many times the detail maps repeat across the UVs
+uniform float alphaCutoff; // pixels whose albedo alpha is below this are thrown away (0 = off)
 
 // Debug and lighting
 uniform int DebugView; // one of the DEBUGVIEW_ values, #defined from the C# DebugView enum
@@ -49,7 +50,13 @@ void main()
 {
     // --- Material values: factor x map ---
     // The albedo uses the model's own UVs; the tiling detail maps repeat detailScale times across them
-    vec3 albedo = albedoFactor * texture(AlbedoMap, TexCoord).rgb;
+    vec4 albedoSample = texture(AlbedoMap, TexCoord);
+
+    // Alpha cutout (e.g. leaves): throw the pixel away entirely, so no sorting or blending is needed
+    if (albedoSample.a < alphaCutoff)
+        discard;
+
+    vec3 albedo = albedoFactor * albedoSample.rgb;
     vec2 detailUV = TexCoord * detailScale;
     float metallic = metallicFactor * texture(MetallicMap, detailUV).r;
     float roughness = roughnessFactor * texture(RoughnessMap, detailUV).r;
@@ -57,6 +64,10 @@ void main()
     // --- Surface normal ---
     // Without a normal map, the flat default unpacks to about (0, 0, 1), which leaves the mesh normal unchanged
     vec3 N = normalize(WorldNormal); // re-normalise: interpolation shortens it
+
+    // Double-sided surfaces (leaves): the back face's normal points away from the camera, so flip it
+    if (!gl_FrontFacing)
+        N = -N;
     
     // Tangent, bitangent and normal as the axes of the surface. 
     // The tangent is straightened to be exactly perpendicular to the normal, and the bitangent's sign keeps mirrored UVs the right way round.

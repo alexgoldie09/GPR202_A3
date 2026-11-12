@@ -16,6 +16,7 @@ namespace GPR202_A3.Graphics
       public const int NORMALLOCATION = 2;
       public const int TANGENTLOCATION = 3;
       public const int BITANGENTLOCATION = 4;
+      public const int INSTANCEMATRIXLOCATION = 5; // uses locations 5 to 8 (one per matrix row)
 
       // Floats per value of each attribute
       private const int VECTOR3SIZE = 3;
@@ -106,6 +107,26 @@ namespace GPR202_A3.Graphics
 
          _vao.Bind();
          GL.DrawElements(PrimitiveType.Triangles, IndexCount, DrawElementsType.UnsignedInt, 0);
+         _vao.Unbind();
+      }
+
+      /// <summary>
+      /// Links a VBO of per-instance matrices, so DrawInstanced can draw many copies in one call.
+      /// </summary>
+      /// <param name="instanceVbo">One Matrix4 per copy.</param>
+      public void LinkInstances(VBO instanceVbo) => _vao?.LinkInstanceMatrices(INSTANCEMATRIXLOCATION, instanceVbo);
+
+      /// <summary>
+      /// Draws many copies of the mesh in one call, each with its own matrix from the linked instance VBO.
+      /// </summary>
+      /// <param name="instanceCount">How many copies to draw.</param>
+      public void DrawInstanced(int instanceCount)
+      {
+         if (_vao == null || IndexCount == 0 || instanceCount == 0)
+            return;
+
+         _vao.Bind();
+         GL.DrawElementsInstanced(PrimitiveType.Triangles, IndexCount, DrawElementsType.UnsignedInt, IntPtr.Zero, instanceCount);
          _vao.Unbind();
       }
 

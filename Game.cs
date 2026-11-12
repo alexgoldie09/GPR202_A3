@@ -60,6 +60,7 @@ namespace GPR202_A3
 
         // Render pipeline
         private ShaderProgram? _modelShader;
+        private ShaderProgram? _instancedShader; // same lighting as _modelShader, but one draw places many copies
         private bool _useBackfaceCulling = true;
         private bool _useLighting = true;
         private bool _useVSync = true;
@@ -84,6 +85,7 @@ namespace GPR202_A3
         private Terrain? _terrain;
         private Plane? _plane;
         private Balloon? _balloonModel;
+        private Props? _props;
         private Water? _water;
 
         // Game state
@@ -133,17 +135,11 @@ namespace GPR202_A3
             GL.FrontFace(FrontFaceDirection.Ccw);
             VSync = VSyncMode.On;
 
-            // --- Model shader (values that never change are uploaded once) ---
+            // --- Model shaders (both share Model.frag, only the vertex shader differs) ---
             _modelShader = new ShaderProgram("Model.vert", "Model.frag");
-            _modelShader.Bind();
-            _modelShader.SetVector3("lightDir", SunDirection);
-            _modelShader.SetVector3("lightColor", SunColor);
-            _modelShader.SetFloat("ambientStrength", AMBIENTSTRENGTH);
-            _modelShader.SetInt("AlbedoMap", Material.ALBEDOMAPUNIT);
-            _modelShader.SetInt("NormalMap", Material.NORMALMAPUNIT);
-            _modelShader.SetInt("MetallicMap", Material.METALLICMAPUNIT);
-            _modelShader.SetInt("RoughnessMap", Material.ROUGHNESSMAPUNIT);
-            _modelShader.SetInt("SkyboxMap", Skybox.CUBEMAPUNIT);
+            SetupModelShader(_modelShader);
+            _instancedShader = new ShaderProgram("ModelInstanced.vert", "Model.frag");
+            SetupModelShader(_instancedShader);
 
             // --- Scene ---
             // Six faces in OpenGL's cube map order: +X, -X, +Y, -Y, +Z, -Z
@@ -157,6 +153,7 @@ namespace GPR202_A3
             _terrain.CreatePatch(Vector2.Zero, Water.HalfSize); // the oasis is at the centre
             _plane = new Plane(GetStartPosition());
             _balloonModel = new Balloon();
+            _props = new Props(); // after the terrain, since placement reads its heights
 
             // --- Camera ---
             _camera = new Camera(_width, _height);
@@ -181,11 +178,13 @@ namespace GPR202_A3
 
             _plane?.Delete();
             _balloonModel?.Delete();
+            _props?.Delete();
             _terrain?.Delete();
             _water?.Delete();
             _skybox?.Delete();
             Material.DeleteDefaults();
             _modelShader?.Delete();
+            _instancedShader?.Delete();
             _frameTimer.Delete();
             DebugText.Shutdown();
         }
@@ -301,21 +300,16 @@ namespace GPR202_A3
         /// <param name="view">The view matrix for this pass.</param>
         /// <param name="cameraPosition">The camera position for this pass (for highlights and reflections).</param>
         /// <param name="clipPlane">The clip plane for this pass (only used while clipping is enabled).</param>
+        /// <param name="drawModels">Whether to draw the plane, balloons and props (the refraction pass skips them).</param>
         /// <param name="terrainPatchOnly">Whether to draw only the terrain under the water.</param>
         private void RenderScene(Matrix4 view, Vector3 cameraPosition, Vector4 clipPlane, bool drawModels, bool terrainPatchOnly = false)
         {
+            // Each pass binds its textures again, so materials can't skip themselves based on an earlier pass
+            Material.ResetLastApplied();
+
             if (drawModels && _modelShader != null)
             {
-                // Only the values that change each pass are uploaded here
-                _modelShader.Bind();
-                _modelShader.SetMatrix4("view", view);
-                _modelShader.SetVector3("cameraPos", cameraPosition);
-                _modelShader.SetVector4("clipPlane", clipPlane);
-                _modelShader.SetInt("DebugView", (int)_debugView);
-                _modelShader.SetInt("UseLighting", _useLighting ? 1 : 0);
-
-                // Each pass binds its textures again, so materials can't skip themselves based on an earlier pass
-                Material.ResetLastApplied();
+                SetPassUniforms(_modelShader, view, cameraPosition, clipPlane);
                 _plane?.Render(_modelShader);
                 if (_balloonModel != null)
                 {
@@ -324,8 +318,43 @@ namespace GPR202_A3
                 }
             }
 
+            if (drawModels && _instancedShader != null && _props != null)
+            {
+                SetPassUniforms(_instancedShader, view, cameraPosition, clipPlane);
+                _props.Render(_instancedShader);
+            }
+
             // After the models, so terrain pixels hidden behind them are skipped by the depth test
             _terrain?.Render(view, clipPlane, _debugView, _useLighting, terrainPatchOnly);
+        }
+
+        /// <summary>
+        /// Uploads the model shader values that never change (lighting and texture units).
+        /// </summary>
+        private static void SetupModelShader(ShaderProgram shader)
+        {
+            shader.Bind();
+            shader.SetVector3("lightDir", SunDirection);
+            shader.SetVector3("lightColor", SunColor);
+            shader.SetFloat("ambientStrength", AMBIENTSTRENGTH);
+            shader.SetInt("AlbedoMap", Material.ALBEDOMAPUNIT);
+            shader.SetInt("NormalMap", Material.NORMALMAPUNIT);
+            shader.SetInt("MetallicMap", Material.METALLICMAPUNIT);
+            shader.SetInt("RoughnessMap", Material.ROUGHNESSMAPUNIT);
+            shader.SetInt("SkyboxMap", Skybox.CUBEMAPUNIT);
+        }
+
+        /// <summary>
+        /// Binds a model shader and uploads the values that change each pass.
+        /// </summary>
+        private void SetPassUniforms(ShaderProgram shader, Matrix4 view, Vector3 cameraPosition, Vector4 clipPlane)
+        {
+            shader.Bind();
+            shader.SetMatrix4("view", view);
+            shader.SetVector3("cameraPos", cameraPosition);
+            shader.SetVector4("clipPlane", clipPlane);
+            shader.SetInt("DebugView", (int)_debugView);
+            shader.SetInt("UseLighting", _useLighting ? 1 : 0);
         }
 
         /// <summary>
@@ -431,6 +460,7 @@ namespace GPR202_A3
             if (kb.IsKeyPressed(Keys.F3))
             {
                 _useBackfaceCulling = !_useBackfaceCulling;
+                Material.CullingEnabled = _useBackfaceCulling; // so double-sided materials put back the right state
                 if (_useBackfaceCulling)
                     GL.Enable(EnableCap.CullFace);
                 else
@@ -483,10 +513,12 @@ namespace GPR202_A3
 
             Matrix4 projection = _camera.GetProjectionMatrix();
 
-            if (_modelShader != null)
+            foreach (ShaderProgram? shader in new[] { _modelShader, _instancedShader })
             {
-                _modelShader.Bind();
-                _modelShader.SetMatrix4("projection", projection);
+                if (shader == null)
+                    continue;
+                shader.Bind();
+                shader.SetMatrix4("projection", projection);
             }
 
             _terrain?.SetProjection(projection);
