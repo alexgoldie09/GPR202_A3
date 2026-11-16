@@ -101,6 +101,11 @@ namespace GPR202_A3.Particles
         }
 
         /// <summary>
+        /// Uploads the fog settings. Call on load, and again when the fog mode changes.
+        /// </summary>
+        public void SetFog(Fog fog) => fog.Upload(_shader);
+
+        /// <summary>
         /// Uploads the projection. Call on load and on resize.
         /// </summary>
         public void SetProjection(Matrix4 projection)
@@ -121,6 +126,7 @@ namespace GPR202_A3.Particles
 
             _shader.Bind();
             _shader.SetMatrix4("view", view);
+            _shader.SetVector3("cameraPos", cameraPosition); // for the fog
 
             // The camera's right and up directions are the first two columns of the view matrix's rotation.
             // Billboards are built from them, so they always face the camera.

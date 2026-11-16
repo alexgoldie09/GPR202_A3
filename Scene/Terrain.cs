@@ -280,6 +280,11 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
+        /// Uploads the fog settings. Call on load, and again when the fog mode changes.
+        /// </summary>
+        public void SetFog(Fog fog) => fog.Upload(_shader);
+
+        /// <summary>
         /// Uploads the projection matrix. Call when the window is resized.
         /// </summary>
         public void SetProjection(Matrix4 projection)
@@ -293,14 +298,17 @@ namespace GPR202_A3.Scene
         /// Draws the patches the camera can see, each at its detail level.
         /// </summary>
         /// <param name="view">This pass's view matrix.</param>
+        /// <param name="cameraPosition">This pass's camera position (for the fog).</param>
         /// <param name="clipPlane">The water pass's clip plane (only used while clipping is enabled).</param>
         /// <param name="debugView">The current debug view.</param>
         /// <param name="useLighting">Whether to light the terrain.</param>
         /// <param name="areaOnly">true to draw only the area set by SetArea.</param>
-        public void Render(Matrix4 view, Vector4 clipPlane, DebugView debugView, bool useLighting, bool areaOnly = false)
+        public void Render(Matrix4 view, Vector3 cameraPosition, Vector4 clipPlane, DebugView debugView, bool useLighting,
+            bool areaOnly = false)
         {
             _shader.Bind();
             _shader.SetMatrix4("view", view);
+            _shader.SetVector3("cameraPos", cameraPosition);
             _shader.SetVector4("clipPlane", clipPlane);
             _shader.SetInt("DebugView", (int)debugView);
             _shader.SetInt("UseLighting", useLighting ? 1 : 0);

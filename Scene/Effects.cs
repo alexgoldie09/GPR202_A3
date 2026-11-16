@@ -1,3 +1,4 @@
+using GPR202_A3.Graphics;
 using GPR202_A3.Particles;
 using OpenTK.Mathematics;
 
@@ -168,6 +169,11 @@ namespace GPR202_A3.Scene
         /// Uploads the projection. Call on load and on resize.
         /// </summary>
         public void SetProjection(Matrix4 projection) => _system.SetProjection(projection);
+
+        /// <summary>
+        /// Uploads the fog settings. Call on load, and again when the fog mode changes.
+        /// </summary>
+        public void SetFog(Fog fog) => _system.SetFog(fog);
 
         /// <summary>
         /// Removes every particle (e.g. on a new game), and moves the trail to the plane without drawing a line

@@ -57,8 +57,9 @@ namespace GPR202_A3.Graphics
             GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureWrapR, (int)TextureWrapMode.ClampToEdge);
 
-            // Filtering: linear, no mipmaps (the sky is always seen at about the same size on screen)
-            GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+            // Filtering: linear, with mipmaps. The sky itself always uses the full-size level, but the fog reads
+            // a small, blurry level for its colour (see Fog.glsl).
+            GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
             GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
 
             // Cube map faces are used the way they are stored in the file (top row first), so no flip.
@@ -98,6 +99,11 @@ namespace GPR202_A3.Graphics
                     Log.Error($"Cube face '{faceFiles[i]}' failed: {e.Message}");
                 }
             }
+
+            // The smaller levels for the fog colour. Seamless filtering blends across the faces' edges,
+            // which matters at small levels, where each face is only a few pixels.
+            GL.GenerateMipmap(GenerateMipmapTarget.TextureCubeMap);
+            GL.Enable(EnableCap.TextureCubeMapSeamless);
 
             Log.Info($"Loaded cube map ({faceSize}x{faceSize} faces)");
 

@@ -72,7 +72,7 @@ namespace GPR202_A3
         private const float READOUTINTERVAL = 0.5f;
 
         // Every debug key (pressing one refreshes the debug readout straight away)
-        private static readonly Keys[] DebugKeys = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7, Keys.F8, Keys.F9, Keys.F10];
+        private static readonly Keys[] DebugKeys = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7, Keys.F8, Keys.F9, Keys.F10, Keys.F12];
 
         // How far ahead of the plane the F8 and F9 test effects go off, so they're in view
         private const float TESTEFFECTDISTANCE = 25f;
@@ -132,6 +132,9 @@ namespace GPR202_A3
         private Balloon? _balloonModel;
         private Props? _props;
         private Effects? _effects;
+
+        // Fog settings, shared by every world shader (F11 changes the mode)
+        private Fog? _fog;
         private Water? _water;
         
         // Particles
@@ -204,6 +207,8 @@ namespace GPR202_A3
             _balloonModel = new Balloon();
             _props = new Props(); // after the terrain, since placement reads its heights
             _effects = new Effects();
+            _fog = new Fog(SunDirection, SunColor, Terrain.WaterLevel, Skybox.CUBEMAPUNIT);
+            UploadFog();
 
             // --- Camera ---
             _camera = new Camera(_width, _height);
@@ -388,7 +393,7 @@ namespace GPR202_A3
             }
 
             // After the models, so terrain pixels hidden behind them are skipped by the depth test
-            _terrain?.Render(view, clipPlane, _debugView, _useLighting, terrainAreaOnly);
+            _terrain?.Render(view, cameraPosition, clipPlane, _debugView, _useLighting, terrainAreaOnly);
         }
 
         /// <summary>
@@ -529,6 +534,13 @@ namespace GPR202_A3
             if (kb.IsKeyPressed(Keys.F10) && _terrain != null)
                 _terrain.LodEnabled = !_terrain.LodEnabled;
 
+            // F12: next fog mode (off, linear, exponential, exponential squared, height layer)
+            if (kb.IsKeyPressed(Keys.F12) && _fog != null)
+            {
+                _fog.NextMode();
+                UploadFog();
+            }
+
             foreach (Keys key in DebugKeys)
             {
                 if (kb.IsKeyPressed(key))
@@ -608,7 +620,7 @@ namespace GPR202_A3
             _debugText.SetLine(VIEWLINE, $"F1 View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
                                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}",
                 ControlsColor);
-            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  F8 Pop  F9 Crash  Esc: Quit",
+            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  F8 Pop  F9 Crash  F12 Fog: {FogModeName()}  Esc: Quit",
                 ControlsColor);
         }
 
@@ -634,6 +646,36 @@ namespace GPR202_A3
             _effects?.SetProjection(projection);
             _skybox?.SetProjection(projection);
             _water?.SetProjection(projection, _camera.NearPlane, _camera.FarPlane);
+        }
+
+        /// <summary>
+        /// Uploads the fog settings to every shader that uses them (on load, and when F11 changes the mode).
+        /// </summary>
+        private void UploadFog()
+        {
+            if (_fog == null)
+                return;
+
+            foreach (ShaderProgram? shader in new[] { _modelShader, _instancedShader })
+            {
+                if (shader != null)
+                    _fog.Upload(shader);
+            }
+
+            _terrain?.SetFog(_fog);
+            _water?.SetFog(_fog);
+            _skybox?.SetFog(_fog);
+            _effects?.SetFog(_fog);
+        }
+
+        /// <summary>
+        /// The fog mode's name for the debug readout.
+        /// </summary>
+        private string FogModeName()
+        {
+            if (_fog == null)
+                return OnOff(false);
+            return _fog.Mode.ToString();
         }
 
         /// <summary>

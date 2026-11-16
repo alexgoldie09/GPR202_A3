@@ -9,6 +9,7 @@ layout(location = 4) in float aSprite; // which atlas cell
 
 out vec2 TexCoord; // position in the atlas
 out vec4 ParticleColor;
+out vec3 WorldPos; // for the fog
 
 uniform mat4 view; // world to camera
 uniform mat4 projection; // camera to clip space
@@ -42,6 +43,7 @@ void main()
     // Row-vector convention (matrices are uploaded with transpose = true), so vectors go on the left
     vec4 worldPos = vec4(aPositionSize.xyz + offset, 1.0);
     gl_Position = worldPos * view * projection;
+    WorldPos = worldPos.xyz;
 
     // This sprite's cell in the atlas, and this corner's place in it
     vec2 cell = vec2(mod(aSprite, atlasGrid.x), floor(aSprite / atlasGrid.x));

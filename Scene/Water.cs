@@ -194,6 +194,11 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
+        /// Uploads the fog settings. Call on load, and again when the fog mode changes.
+        /// </summary>
+        public void SetFog(Fog fog) => fog.Upload(_shader);
+
+        /// <summary>
         /// Uploads the projection matrix and its near/far planes (used to turn depth values into distances).
         /// Call when the window is resized.
         /// </summary>

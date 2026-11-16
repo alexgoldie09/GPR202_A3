@@ -91,6 +91,11 @@ namespace GPR202_A3.Scene
 
         #region Public API
         /// <summary>
+        /// Uploads the fog settings. Call on load, and again when the fog mode changes.
+        /// </summary>
+        public void SetFog(Fog fog) => fog.Upload(_shader);
+
+        /// <summary>
         /// Uploads the camera's projection matrix (on load and whenever the window resizes).
         /// </summary>
         /// <param name="projection">The camera's projection matrix.</param>

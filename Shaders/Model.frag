@@ -46,6 +46,9 @@ uniform vec3 lightColor; // colour/intensity of the light
 uniform float ambientStrength; // minimum brightness, so faces facing away aren't pitch black
 uniform vec3 cameraPos; // for specular highlights and reflections
 
+// Fog, shared with the other world shaders
+#include "Fog.glsl"
+
 void main()
 {
     // --- Material values: factor x map ---
@@ -136,4 +139,8 @@ void main()
         + environment;
         FragColor = vec4(colour, 1.0);
     }
+
+    // Fog over the lit colour (not the debug views, so they stay readable)
+    if (DebugView == DEBUGVIEW_TEXTURE)
+        FragColor.rgb = ApplyFog(FragColor.rgb, WorldPos, cameraPos);
 }

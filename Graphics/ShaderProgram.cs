@@ -18,6 +18,11 @@ namespace GPR202_A3.Graphics
         public int ID { get; }
         #endregion
         
+        #region Constants
+        // A line starting with this is replaced by the named file's text (see InsertIncludes)
+        private const string INCLUDEDIRECTIVE = "#include";
+        #endregion
+
         #region Private Fields
         // A dictionary to cache uniform locations for efficient access.
         private readonly Dictionary<string, int> _uniformLocations = new();
@@ -37,7 +42,7 @@ namespace GPR202_A3.Graphics
             
             // Create vertex shader
             var vertexShader = GL.CreateShader(ShaderType.VertexShader);
-            GL.ShaderSource(vertexShader, InsertDefines(LoadShaderSource(vertexShaderFilepath)));
+            GL.ShaderSource(vertexShader, InsertDefines(InsertIncludes(LoadShaderSource(vertexShaderFilepath))));
             GL.CompileShader(vertexShader);
             GL.GetShader(vertexShader, ShaderParameter.CompileStatus, out int vStatus);
             if (vStatus != (int)All.True)
@@ -47,7 +52,7 @@ namespace GPR202_A3.Graphics
             
             // Create fragment shader
             var fragmentShader = GL.CreateShader(ShaderType.FragmentShader);
-            GL.ShaderSource(fragmentShader, InsertDefines(LoadShaderSource(fragmentShaderFilePath)));
+            GL.ShaderSource(fragmentShader, InsertDefines(InsertIncludes(LoadShaderSource(fragmentShaderFilePath))));
             GL.CompileShader(fragmentShader);
             GL.GetShader(fragmentShader, ShaderParameter.CompileStatus, out int fStatus);
             if (fStatus != (int)All.True)
@@ -76,6 +81,13 @@ namespace GPR202_A3.Graphics
         #endregion
         
         #region Public API
+        /// <summary>
+        /// Whether the shader has a uniform with this name. GLSL removes uniforms a shader never uses,
+        /// so shared settings (like the fog) can check before setting, without a "not found" warning.
+        /// </summary>
+        /// <param name="name">The uniform's name.</param>
+        public bool HasUniform(string name) => GL.GetUniformLocation(ID, name) != -1;
+
         /// <summary>
         /// Sets a 4x4 matrix uniform variable in the shader program.
         /// Uploaded transposed (row-vector convention), matching the vec4 * matrix order used in the shaders.
@@ -195,7 +207,31 @@ namespace GPR202_A3.Graphics
             string defines = "";
             foreach (DebugView view in Enum.GetValues<DebugView>())
                 defines += $"#define DEBUGVIEW_{view.ToString().ToUpperInvariant()} {(int)view}\n";
+            foreach (FogMode mode in Enum.GetValues<FogMode>())
+                defines += $"#define FOGMODE_{mode.ToString().ToUpperInvariant()} {(int)mode}\n";
             return defines;
+        }
+
+        /// <summary>
+        /// Replaces each #include "File.glsl" line with that file's text (GLSL has no #include of its own).
+        /// Lets several shaders share one copy of some GLSL, like the fog.
+        /// </summary>
+        /// <param name="source">The shader source.</param>
+        /// <returns>The source with every include filled in.</returns>
+        private static string InsertIncludes(string source)
+        {
+            string[] lines = source.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (!line.StartsWith(INCLUDEDIRECTIVE))
+                    continue;
+
+                // The file name is between the quotes
+                string fileName = line.Substring(INCLUDEDIRECTIVE.Length).Trim().Trim('"');
+                lines[i] = LoadShaderSource(fileName);
+            }
+            return string.Join('\n', lines);
         }
 
         /// <summary>

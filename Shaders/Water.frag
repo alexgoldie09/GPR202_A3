@@ -52,6 +52,9 @@ float LinearDepth(float depth)
     return 2.0 * nearPlane * farPlane / (farPlane + nearPlane - z * (farPlane - nearPlane));
 }
 
+// Fog, shared with the other world shaders
+#include "Fog.glsl"
+
 void main()
 {
     // Where this pixel is on screen (0..1), which is where it is in the reflection and refraction textures
@@ -105,4 +108,9 @@ void main()
     FragColor = vec4(WIREFRAMECOLOR, 1.0);
     else
     FragColor = vec4(colour, edge); // the shore fades into the sand underneath
+
+    // Fog over the water. This also covers the view from the camera to the water for the reflection,
+    // whose own fog starts at the water's surface (see Fog.glsl).
+    if (DebugView == DEBUGVIEW_TEXTURE)
+        FragColor.rgb = ApplyFog(FragColor.rgb, WorldPos, cameraPos);
 }

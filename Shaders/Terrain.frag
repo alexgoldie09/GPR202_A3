@@ -30,6 +30,10 @@ uniform int UseLighting; // 1 = lit, 0 = unlit
 uniform vec3 lightDir; // direction the sunlight travels
 uniform vec3 lightColor; // colour of the sunlight
 uniform float ambientStrength; // minimum brightness
+uniform vec3 cameraPos; // for the fog
+
+// Fog, shared with the other world shaders
+#include "Fog.glsl"
 
 void main()
 {
@@ -78,4 +82,8 @@ void main()
         float diffuse = max(dot(detailN, L), 0.0);
         FragColor = vec4(albedo * (ambientStrength + diffuse) * lightColor, 1.0);
     }
+
+    // Fog over the lit colour (not the debug views, so they stay readable)
+    if (DebugView == DEBUGVIEW_TEXTURE)
+        FragColor.rgb = ApplyFog(FragColor.rgb, WorldPos, cameraPos);
 }

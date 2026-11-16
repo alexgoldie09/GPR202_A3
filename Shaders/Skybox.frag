@@ -6,8 +6,14 @@ out vec4 FragColor; // Output colour of the fragment
 
 uniform samplerCube SkyboxMap; // The sky cube map (unit 4)
 
+// Fog, shared with the other world shaders
+#include "Fog.glsl"
+
 void main()
 {
     // A cube map picks the face the direction points at, then the pixel on that face
-    FragColor = texture(SkyboxMap, TexCoords);
+    vec3 sky = texture(SkyboxMap, TexCoords).rgb;
+
+    // Haze over the bottom of the sky, so the far terrain melts into it
+    FragColor = vec4(ApplySkyHaze(sky, normalize(TexCoords)), 1.0);
 }
