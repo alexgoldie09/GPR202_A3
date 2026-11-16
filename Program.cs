@@ -10,14 +10,14 @@ namespace GPR202_A3
         // Starting window size and title
         private const int WINDOWWIDTH = 1280;
         private const int WINDOWHEIGHT = 720;
-        private const string TITLE = "GPR2 Balloon Hunt";
+        private const string TITLE = "GPR202 Balloon Hunt";
 
         static void Main(string[] args)
         {
             // Numbers always use '.' for decimals, whatever the computer's region
             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 
-            Console.WriteLine("GPR Balloon Hunt: Torrens University 2024");
+            Console.WriteLine("GPR202 Balloon Hunt: Torrens University 2024");
 
             using var game = new Game(WINDOWWIDTH, WINDOWHEIGHT, TITLE);
             game.Run();

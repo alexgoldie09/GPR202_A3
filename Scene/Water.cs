@@ -131,8 +131,8 @@ namespace GPR202_A3.Scene
             _shader.SetFloat("RippleTileSize", RIPPLETILESIZE);
             _shader.SetFloat("SecondLayerScale", SECONDLAYERSCALE);
 
-            DebugText.Log($"Water: {width}x{height} reflection and refraction", Color4.LightGreen, DebugText.INFODURATION);
-            DebugText.CheckGLError("Water setup");
+            Log.Info($"Water: {width}x{height} reflection and refraction");
+            Log.CheckGLError("Water setup");
         }
         #endregion
 

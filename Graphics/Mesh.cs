@@ -89,10 +89,8 @@ namespace GPR202_A3.Graphics
 
          IndexCount = data.IndexCount;
 
-         DebugText.Log(
-            $"{name} uploaded: {data.VertexCount} vertices, {IndexCount} indices ({IndexCount / 3} triangles)",
-            Color4.LightGreen, DebugText.INFODURATION);
-         DebugText.CheckGLError($"{name} upload");
+         Log.Info($"{name} uploaded: {data.VertexCount} vertices, {IndexCount} indices ({IndexCount / 3} triangles)");
+         Log.CheckGLError($"{name} upload");
       }
       #endregion
 

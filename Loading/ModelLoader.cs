@@ -61,7 +61,7 @@ namespace GPR202_A3.Loading
 
             CollectNode(scene, scene.RootNode, parts);
 
-            DebugText.Log($"{relativePath}: parts [{string.Join(", ", parts.Keys)}]", Color4.LightGreen, DebugText.INFODURATION);
+            Log.Info($"{relativePath}: parts [{string.Join(", ", parts.Keys)}]");
             return parts;
         }
 
@@ -109,7 +109,7 @@ namespace GPR202_A3.Loading
                 AppendMesh(data, mesh);
             }
 
-            DebugText.Log($"{relativePath}: materials [{string.Join(", ", byMaterial.Keys)}]", Color4.LightGreen, DebugText.INFODURATION);
+            Log.Info($"{relativePath}: materials [{string.Join(", ", byMaterial.Keys)}]");
             return byMaterial;
         }
         #endregion
@@ -126,7 +126,7 @@ namespace GPR202_A3.Loading
             string path = AssetPaths.Resource(relativePath);
             if (!File.Exists(path))
             {
-                DebugText.Log($"Model '{relativePath}' not found", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"Model '{relativePath}' not found");
                 return null;
             }
 
@@ -138,8 +138,7 @@ namespace GPR202_A3.Loading
             }
             catch (AssimpException e)
             {
-                Console.WriteLine($"Assimp failed to import '{path}': {e.Message}");
-                DebugText.Log($"Model '{relativePath}' failed to import (see console)", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"Model '{relativePath}' failed to import: {e.Message}");
                 return null;
             }
         }

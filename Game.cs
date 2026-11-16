@@ -2,6 +2,7 @@
 using GPR202_A3.Debugging;
 using GPR202_A3.Graphics;
 using GPR202_A3.Scene;
+using GPR202_A3.UI;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
@@ -40,14 +41,39 @@ namespace GPR202_A3
         // Shown where nothing is drawn (normally covered by the skybox)
         private static readonly Color4 ClearColor = new(0.3f, 0.4f, 0.5f, 1f);
 
-        // Debug text size (1 = the font's 16px)
-        private const float TEXTSCALE = 1.4f;
+        // HUD text sizes, as whole-number multiples of the font's 16px (whole numbers keep the pixels even)
+        private const int TITLESCALE = 3;
+        private const int HUDSCALE = 2;
+        private const int DEBUGSCALE = 1;
 
-        // Keys for the debug readout lines, so each one updates in place
-        private const int FRAMEREADOUT = 1;
-        private const int LOADREADOUT = 2;
-        private const int BALLOONREADOUT = 3;
-        private const int CONTROLSREADOUT = 4;
+        // Gap between the HUD and the screen edges, in pixels
+        private static readonly Vector2 ScreenMargin = new(12f, 12f);
+        
+        // Gap between the timed message and the bottom of the screen, in pixels
+        private static readonly Vector2 MessageOffset = new(12f, 180f);
+
+        // HUD backgrounds: dark and see-through, with a few pixels around the text
+        private static readonly Color4 PanelColor = new(0f, 0f, 0f, 0.45f);
+        private const float PANELPADDING = 3f;
+
+        // HUD text colours
+        private static readonly Color4 TitleColor = Color4.White;
+        private static readonly Color4 BalloonColor = Color4.Gold;
+        private static readonly Color4 MessageColor = Color4.Yellow;
+        private static readonly Color4 ReadoutColor = Color4.White;
+        private static readonly Color4 ControlsColor = Color4.Plum;
+
+        // Seconds a message like "Balloon collected!" stays on screen
+        private const float MESSAGEDURATION = 3f;
+
+        // Texture unit for the HUD font (the HUD draws last, so it can share the albedo unit)
+        private const int HUDFONTUNIT = 0;
+
+        // Lines of the debug block
+        private const int FRAMELINE = 0;
+        private const int LOADLINE = 1;
+        private const int VIEWLINE = 2;
+        private const int CONTROLSLINE = 3;
         #endregion
 
         #region Private Fields
@@ -78,6 +104,15 @@ namespace GPR202_A3
 
         // How long OnLoad took
         private double _loadMs;
+
+        // HUD: the game title (top centre), balloons left (bottom right), timed messages (bottom centre),
+        // and the debug readouts (top left, F7 hides them)
+        private Font? _font;
+        private Hud? _hud;
+        private TextBlock? _titleText;
+        private TextBlock? _balloonText;
+        private TextBlock? _messageText;
+        private TextBlock? _debugText;
 
         // Scene
         private Camera? _camera;
@@ -121,10 +156,11 @@ namespace GPR202_A3
             base.OnLoad();
             var loadTimer = Stopwatch.StartNew();
 
-            // --- Debugging Setup ---
-            DebugText.Initialize(_width, _height);
-            DebugText.TextScale = TEXTSCALE;
+            // --- Debugging and HUD Setup ---
             _frameTimer.Initialize();
+            _font = new Font("UI/BitPapAtlas.png", HUDFONTUNIT);
+            _hud = new Hud(_font, _width, _height);
+            SetupHud(_hud);
 
             // --- Render state ---
             GL.ClearColor(ClearColor);
@@ -165,8 +201,8 @@ namespace GPR202_A3
 
             loadTimer.Stop();
             _loadMs = loadTimer.Elapsed.TotalMilliseconds;
-            Console.WriteLine($"Load time: {_loadMs:0} ms");
-            DebugText.CheckGLError("OnLoad");
+            Log.Info($"Load time: {_loadMs:0} ms");
+            Log.CheckGLError("OnLoad");
         }
 
         /// <summary>
@@ -186,7 +222,8 @@ namespace GPR202_A3
             _modelShader?.Delete();
             _instancedShader?.Delete();
             _frameTimer.Delete();
-            DebugText.Shutdown();
+            _hud?.Delete();
+            _font?.Delete();
         }
 
         /// <summary>
@@ -203,7 +240,7 @@ namespace GPR202_A3
 
             _camera?.SetScreenSize(_width, _height);
             UploadProjection();
-            DebugText.SetScreenSize(_width, _height);
+            _hud?.SetScreenSize(_width, _height);
         }
 
         /// <summary>
@@ -226,7 +263,7 @@ namespace GPR202_A3
 
             // Seconds since the last update, so movement doesn't depend on the frame rate
             float deltaTime = (float)args.Time;
-            DebugText.Update(deltaTime);
+            _hud?.Update(deltaTime);
 
             KeyboardState kb = KeyboardState;
             if (kb.IsKeyPressed(Keys.Escape))
@@ -236,7 +273,7 @@ namespace GPR202_A3
             }
 
             HandleDebugKeys(kb);
-            ShowDebugReadouts();
+            UpdateDebugText();
 
             // Pause while the window isn't focused
             if (!IsFocused || _plane == null || _camera == null)
@@ -250,7 +287,7 @@ namespace GPR202_A3
 
         /// <summary>
         /// Draws the water's reflection and refraction (if the water is on screen), then the scene, the water,
-        /// the sky, and the debug text on top.
+        /// the sky, and the HUD on top.
         /// </summary>
         protected override void OnRenderFrame(FrameEventArgs args)
         {
@@ -278,14 +315,14 @@ namespace GPR202_A3
                 if (drawWater)
                     _water?.Render(view, _camera.Position, _debugView, _useLighting);
 
-                // Back to filled polygons for the sky and debug text
+                // Back to filled polygons for the sky and HUD
                 GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
 
                 // Last, so the sky is only drawn where nothing else covers it
                 _skybox?.Render(view);
             }
 
-            DebugText.Render();
+            _hud?.Render();
 
             _frameTimer.EndFrame(args.Time);
             Context.SwapBuffers();
@@ -398,7 +435,7 @@ namespace GPR202_A3
             }
 
             _balloonsLeft = BALLOONSTOTAL;
-            UpdateTitle();
+            UpdateBalloonText();
 
             _plane?.Reset(GetStartPosition(), STARTHEADING);
             if (_plane != null)
@@ -424,8 +461,8 @@ namespace GPR202_A3
                 if (!wasCollected && balloon.Collected)
                 {
                     _balloonsLeft--;
-                    UpdateTitle();
-                    DebugText.Log($"Balloon collected! {_balloonsLeft} remaining.", Color4.Yellow, DebugText.EVENTDURATION);
+                    UpdateBalloonText();
+                    _messageText?.ShowFor($"Balloon collected! {_balloonsLeft} remaining", MessageColor, MESSAGEDURATION);
                 }
 
                 // The original never removed them, and kept drawing them at scale 0
@@ -481,27 +518,60 @@ namespace GPR202_A3
             // F6: water on/off (to measure what the reflection and refraction passes cost)
             if (kb.IsKeyPressed(Keys.F6))
                 _useWater = !_useWater;
+
+            // F7: debug readouts on/off (for a clean HUD in screenshots)
+            if (kb.IsKeyPressed(Keys.F7) && _debugText != null)
+                _debugText.Visible = !_debugText.Visible;
         }
 
         /// <summary>
-        /// The debug readout lines, updated in place.
+        /// Makes the HUD's blocks. Each one is anchored to a point of the screen, so it stays put when the window resizes.
         /// </summary>
-        private void ShowDebugReadouts()
+        private void SetupHud(Hud hud)
         {
-            DebugText.Log($"Frame: {_frameTimer.AverageFrameMs:0.0} ms ({_frameTimer.AverageFps:0} FPS), " +
-                          $"CPU: {_frameTimer.AverageRenderMs:0.00} ms, GPU: {_frameTimer.AverageGpuMs:0.00} ms",
-                Color4.White, DebugText.READOUTDURATION, FRAMEREADOUT);
-            DebugText.Log($"Load: {_loadMs:0} ms", Color4.White, DebugText.READOUTDURATION, LOADREADOUT);
-            DebugText.Log($"Balloons remaining: {_balloonsLeft}", Color4.DarkGreen, DebugText.READOUTDURATION, BALLOONREADOUT);
-            DebugText.Log($"F1 Debug View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
-                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}  F5 Crater  F6 Water: {OnOff(_useWater)}  Esc: Quit",
-                Color4.DarkMagenta, DebugText.READOUTDURATION, CONTROLSREADOUT);
+            // Game title, top centre
+            _titleText = hud.Add(new TextBlock(new RectTransform(Anchor.TopCentre, ScreenMargin), TITLESCALE,
+                PanelColor, PANELPADDING));
+            _titleText.SetText(_title, TitleColor);
+
+            // Balloons left, bottom right
+            _balloonText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomRight, ScreenMargin), HUDSCALE,
+                PanelColor, PANELPADDING));
+
+            // Timed messages, bottom centre (hidden until ShowFor is called)
+            _messageText = hud.Add(new TextBlock(new RectTransform(Anchor.Centre, MessageOffset), HUDSCALE));
+            _messageText.Visible = false;
+
+            // Debug readouts, top left
+            _debugText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomLeft, ScreenMargin), DEBUGSCALE,
+                PanelColor, PANELPADDING));
         }
 
         /// <summary>
-        /// Shows the balloons left in the window title, like the original. Only called when the count changes.
+        /// Shows how many balloons are left. Only called when the count changes.
         /// </summary>
-        private void UpdateTitle() => Title = $"{_title}  -  Balloons remaining: {_balloonsLeft}";
+        private void UpdateBalloonText() =>
+            _balloonText?.SetText($"Balloons: {_balloonsLeft} / {BALLOONSTOTAL}", BalloonColor);
+
+        /// <summary>
+        /// The debug readout lines. The HUD only rebuilds when one of them actually changes
+        /// (the frame timings update twice a second).
+        /// </summary>
+        private void UpdateDebugText()
+        {
+            if (_debugText == null || !_debugText.Visible)
+                return;
+
+            _debugText.SetLine(FRAMELINE, $"Frame: {_frameTimer.AverageFrameMs:0.0} ms ({_frameTimer.AverageFps:0} FPS), " +
+                                          $"CPU: {_frameTimer.AverageRenderMs:0.00} ms, GPU: {_frameTimer.AverageGpuMs:0.00} ms",
+                ReadoutColor);
+            _debugText.SetLine(LOADLINE, $"Load: {_loadMs:0} ms", ReadoutColor);
+            _debugText.SetLine(VIEWLINE, $"F1 View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
+                                         $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}",
+                ControlsColor);
+            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  Esc: Quit",
+                ControlsColor);
+        }
 
         /// <summary>
         /// Uploads the projection matrix to every shader that uses it (on load and on resize).

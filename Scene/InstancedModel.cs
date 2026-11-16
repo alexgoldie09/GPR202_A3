@@ -48,7 +48,7 @@ namespace GPR202_A3.Scene
             {
                 if (!materials.TryGetValue(materialName, out Material? material))
                 {
-                    DebugText.Log($"{file}: no material set up for '{materialName}', using the default", Color4.Orange, DebugText.WARNINGDURATION);
+                    Log.Warning($"{file}: no material set up for '{materialName}', using the default");
                     material = new Material();
                 }
 

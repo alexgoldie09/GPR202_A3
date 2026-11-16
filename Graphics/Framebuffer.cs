@@ -1,6 +1,5 @@
 using GPR202_A3.Debugging;
 using OpenTK.Graphics.OpenGL4;
-using OpenTK.Mathematics;
 
 namespace GPR202_A3.Graphics
 {
@@ -155,7 +154,7 @@ namespace GPR202_A3.Graphics
 
             FramebufferErrorCode status = GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer);
             if (status != FramebufferErrorCode.FramebufferComplete)
-                DebugText.Log($"Framebuffer {Width}x{Height} is incomplete: {status}", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"Framebuffer {Width}x{Height} is incomplete: {status}");
 
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         }

@@ -1,7 +1,6 @@
 using GPR202_A3.Debugging;
 using GPR202_A3.Utilities;
 using OpenTK.Graphics.OpenGL4;
-using OpenTK.Mathematics;
 using StbImageSharp;
 
 namespace GPR202_A3.Graphics
@@ -41,7 +40,7 @@ namespace GPR202_A3.Graphics
             
             if (string.IsNullOrEmpty(filename))
             {
-                DebugText.Log("Texture filename is null or empty.", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error("Texture filename is null or empty.");
                 return;
             }
             
@@ -72,7 +71,7 @@ namespace GPR202_A3.Graphics
 
                 if (image == null)
                 {
-                    DebugText.Log($"Failed to load texture '{filename}': ImageResult is null.", Color4.Red, DebugText.WARNINGDURATION);
+                    Log.Error($"Failed to load texture '{filename}': ImageResult is null.");
                 }
                 else
                 {
@@ -85,12 +84,12 @@ namespace GPR202_A3.Graphics
                     if (!pixelPerfect)
                         GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
 
-                    DebugText.Log($"Loaded '{filename}' ({image.Width}x{image.Height})", Color4.LightGreen, DebugText.INFODURATION);
+                    Log.Info($"Loaded '{filename}' ({image.Width}x{image.Height})");
                 }
             }
             catch (Exception e)
             {
-                DebugText.Log($"Texture '{filename}' failed: {e.Message}", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"Texture '{filename}' failed: {e.Message}");
             }
 
             // Unbind the texture to prevent accidental modification

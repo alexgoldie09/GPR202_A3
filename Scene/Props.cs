@@ -128,8 +128,7 @@ namespace GPR202_A3.Scene
                 DrawCalls += model.DrawCalls;
             }
 
-            DebugText.Log($"Props: {palms.Count} palms, {rockOnes.Count + rockTwos.Count} rocks, {DrawCalls} draw calls",
-                Color4.LightGreen, DebugText.INFODURATION);
+            Log.Info($"Props: {palms.Count} palms, {rockOnes.Count + rockTwos.Count} rocks, {DrawCalls} draw calls");
         }
         #endregion
 

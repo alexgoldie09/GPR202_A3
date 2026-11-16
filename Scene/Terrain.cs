@@ -141,11 +141,9 @@ namespace GPR202_A3.Scene
 
             timer.Stop();
             double indexMB = (long)_indexCount * sizeof(uint) / BYTESPERMB;
-            DebugText.Log($"Terrain: {GRIDSIZE}x{GRIDSIZE} grid, generated in {generateMs:0} ms, total {timer.Elapsed.TotalMilliseconds:0} ms",
-                Color4.LightGreen, DebugText.INFODURATION);
-            DebugText.Log($"Terrain: 0 vertex bytes, {indexMB:0.0} MB of indices ({_indexCount} strip indices)",
-                Color4.LightGreen, DebugText.INFODURATION);
-            DebugText.CheckGLError("Terrain setup");
+            Log.Info($"Terrain: {GRIDSIZE}x{GRIDSIZE} grid, generated in {generateMs:0} ms, total {timer.Elapsed.TotalMilliseconds:0} ms");
+            Log.Info($"Terrain: 0 vertex bytes, {indexMB:0.0} MB of indices ({_indexCount} strip indices)");
+            Log.CheckGLError("Terrain setup");
         }
         #endregion
 
@@ -244,8 +242,7 @@ namespace GPR202_A3.Scene
             _patchVao.Unbind();
             _patchIndexCount = indices.Count;
 
-            DebugText.Log($"Terrain patch: {_patchIndexCount} indices ({100.0 * _patchIndexCount / _indexCount:0.0}% of the grid)",
-                Color4.LightGreen, DebugText.INFODURATION);
+            Log.Info($"Terrain patch: {_patchIndexCount} indices ({100.0 * _patchIndexCount / _indexCount:0.0}% of the grid)");
         }
 
         /// <summary>
@@ -369,7 +366,7 @@ namespace GPR202_A3.Scene
             if (File.Exists(AssetPaths.Resource(file)))
                 return new Texture(file, unit);
 
-            DebugText.Log($"'{file}' not found: using a plain colour instead", Color4.Orange, DebugText.WARNINGDURATION);
+            Log.Warning($"'{file}' not found: using a plain colour instead");
             return new Texture(fallback.R, fallback.G, fallback.B, unit);
         }
         #endregion

@@ -167,22 +167,21 @@ namespace GPR202_A3.Graphics
             // Check for empty mesh
             if (VertexCount == 0 || IndexCount == 0)
             {
-                DebugText.Log($"{name}: mesh is empty", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"{name}: mesh is empty");
                 return false;
             }
             
             // Check for attribute count mismatch
             if (UVs.Count != VertexCount || Normals.Count != VertexCount)
             {
-                DebugText.Log($"{name}: attribute count mismatch " +
-                              $"(pos {VertexCount}, uv {UVs.Count}, normal {Normals.Count})", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"{name}: attribute count mismatch (pos {VertexCount}, uv {UVs.Count}, normal {Normals.Count})");
                 return false;
             }
             
             // Check for index count being a multiple of 3
             if (IndexCount % 3 != 0)
             {
-                DebugText.Log($"{name}: index count {IndexCount} is not a multiple of 3", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"{name}: index count {IndexCount} is not a multiple of 3");
                 return false;
             }
 
@@ -191,7 +190,7 @@ namespace GPR202_A3.Graphics
             {
                 if (index >= VertexCount)
                 {
-                    DebugText.Log($"{name}: index {index} is out of range (vertex count {VertexCount})", Color4.Red, DebugText.WARNINGDURATION);
+                    Log.Error($"{name}: index {index} is out of range (vertex count {VertexCount})");
                     return false;
                 }
             }

@@ -135,7 +135,7 @@ namespace GPR202_A3.Scene
             }
             else
             {
-                DebugText.Log($"plane.obj has no '{PROPELLERPART}' part, so the propeller won't spin", Color4.Orange, DebugText.WARNINGDURATION);
+                Log.Warning($"plane.obj has no '{PROPELLERPART}' part, so the propeller won't spin");
             }
         }
         #endregion

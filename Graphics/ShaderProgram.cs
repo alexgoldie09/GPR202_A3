@@ -42,8 +42,7 @@ namespace GPR202_A3.Graphics
             GL.GetShader(vertexShader, ShaderParameter.CompileStatus, out int vStatus);
             if (vStatus != (int)All.True)
             {
-                Console.WriteLine($"Vertex shader compile error: {GL.GetShaderInfoLog(vertexShader)}");
-                DebugText.Log($"'{vertexShaderFilepath}' failed to compile (see console)", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"'{vertexShaderFilepath}' failed to compile: {GL.GetShaderInfoLog(vertexShader)}");
             }
             
             // Create fragment shader
@@ -53,8 +52,7 @@ namespace GPR202_A3.Graphics
             GL.GetShader(fragmentShader, ShaderParameter.CompileStatus, out int fStatus);
             if (fStatus != (int)All.True)
             {
-                Console.WriteLine($"Fragment shader compile error: {GL.GetShaderInfoLog(fragmentShader)}");
-                DebugText.Log($"'{fragmentShaderFilePath}' failed to compile (see console)", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"'{fragmentShaderFilePath}' failed to compile: {GL.GetShaderInfoLog(fragmentShader)}");
             }
             
             // Attach the shaders to the shader program
@@ -66,8 +64,7 @@ namespace GPR202_A3.Graphics
             GL.GetProgram(ID, GetProgramParameterName.LinkStatus, out int lStatus);
             if (lStatus != (int)All.True)
             {
-                Console.WriteLine($"Shader program link error: {GL.GetProgramInfoLog(ID)}");
-                DebugText.Log($"Shader program failed to link (see console)", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"Shader program failed to link: {GL.GetProgramInfoLog(ID)}");
             }
             
             // Clean up by detaching and deleting the individual shaders after linking
@@ -163,7 +160,7 @@ namespace GPR202_A3.Graphics
             _uniformLocations[name] = location;
 
             if (location == -1)
-                DebugText.Log($"Uniform '{name}' not found in shader {ID}", Color4.Orange, DebugText.WARNINGDURATION);
+                Log.Warning($"Uniform '{name}' not found in shader {ID}");
 
             return location;
         }
@@ -184,8 +181,7 @@ namespace GPR202_A3.Graphics
             // An empty source will then fail to compile, which is logged by the constructor
             catch (Exception e)
             {
-                Console.WriteLine($"Error loading shader source from '{path}': {e.Message}");
-                DebugText.Log($"Shader '{fileName}' could not be read (see console)", Color4.Red, DebugText.WARNINGDURATION);
+                Log.Error($"Shader '{fileName}' could not be read: {e.Message}");
                 return string.Empty;
             }
         }

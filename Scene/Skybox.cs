@@ -9,7 +9,7 @@ namespace GPR202_A3.Scene
     /// A skybox is a cube with a cube map texture that surrounds the camera, giving the illusion of a distant environment.
     /// 
     /// Not an IRenderable: the scene is everything drawn with the model shader, while the skybox needs its own
-    /// shader and depth test (the same reason DebugText is kept separate).
+    /// shader and depth test (the same reason the HUD is kept separate).
     /// </summary>
     internal class Skybox
     {
@@ -86,7 +86,7 @@ namespace GPR202_A3.Scene
             _shader.Bind();
             _shader.SetInt("SkyboxMap", CUBEMAPUNIT);
 
-            DebugText.CheckGLError("Skybox setup");
+            Log.CheckGLError("Skybox setup");
         }
 
         #region Public API
