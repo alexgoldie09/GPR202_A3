@@ -46,12 +46,6 @@ namespace GPR202_A3
         private const int HUDSCALE = 2;
         private const int DEBUGSCALE = 1;
 
-        // Gap between the HUD and the screen edges, in pixels
-        private static readonly Vector2 ScreenMargin = new(12f, 12f);
-        
-        // Gap between the timed message and the bottom of the screen, in pixels
-        private static readonly Vector2 MessageOffset = new(12f, 180f);
-
         // HUD backgrounds: dark and see-through, with a few pixels around the text
         private static readonly Color4 PanelColor = new(0f, 0f, 0f, 0.45f);
         private const float PANELPADDING = 3f;
@@ -74,6 +68,16 @@ namespace GPR202_A3
         private const int LOADLINE = 1;
         private const int VIEWLINE = 2;
         private const int CONTROLSLINE = 3;
+
+        // Seconds between debug readout refreshes (the frame timings only change this often anyway,
+        // and the particle count would otherwise change, and rebuild the HUD, every frame)
+        private const float READOUTINTERVAL = 0.5f;
+
+        // Every debug key (pressing one refreshes the debug readout straight away)
+        private static readonly Keys[] DebugKeys = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7, Keys.F8, Keys.F9];
+
+        // How far ahead of the plane the F8 and F9 test effects go off, so they're in view
+        private const float TESTEFFECTDISTANCE = 25f;
         #endregion
 
         #region Private Fields
@@ -105,14 +109,22 @@ namespace GPR202_A3
         // How long OnLoad took
         private double _loadMs;
 
-        // HUD: the game title (top centre), balloons left (bottom right), timed messages (bottom centre),
-        // and the debug readouts (top left, F7 hides them)
+        // HUD: the game title (top centre), balloons left (bottom right), timed messages (below the middle),
+        // and the debug readouts (bottom left, F7 hides them)
         private Font? _font;
         private Hud? _hud;
         private TextBlock? _titleText;
         private TextBlock? _balloonText;
         private TextBlock? _messageText;
         private TextBlock? _debugText;
+        
+        // Gap between the HUD and the screen edges, in pixels
+        private Vector2 _screenMarginOffset = new(12f, 12f);
+        // Where the timed message sits: centred across the screen, 180 pixels below the middle
+        private Vector2 _messageOffset = new(0f, 180f);
+
+        // Counts down to the next debug readout refresh
+        private float _readoutTimer;
 
         // Scene
         private Camera? _camera;
@@ -121,7 +133,11 @@ namespace GPR202_A3
         private Plane? _plane;
         private Balloon? _balloonModel;
         private Props? _props;
+        private Effects? _effects;
         private Water? _water;
+        
+        // Particles
+        private Vector3 _balloonConfettiOffset = new(0f, 10f, 0f);
 
         // Game state
         private readonly List<BalloonState> _balloons = new();
@@ -190,6 +206,7 @@ namespace GPR202_A3
             _plane = new Plane(GetStartPosition());
             _balloonModel = new Balloon();
             _props = new Props(); // after the terrain, since placement reads its heights
+            _effects = new Effects();
 
             // --- Camera ---
             _camera = new Camera(_width, _height);
@@ -215,6 +232,7 @@ namespace GPR202_A3
             _plane?.Delete();
             _balloonModel?.Delete();
             _props?.Delete();
+            _effects?.Delete();
             _terrain?.Delete();
             _water?.Delete();
             _skybox?.Delete();
@@ -272,8 +290,10 @@ namespace GPR202_A3
                 return;
             }
 
-            HandleDebugKeys(kb);
-            UpdateDebugText();
+            // A debug key refreshes the readout straight away, so the toggles respond instantly
+            if (HandleDebugKeys(kb))
+                _readoutTimer = 0f;
+            UpdateDebugText(deltaTime);
 
             // Pause while the window isn't focused
             if (!IsFocused || _plane == null || _camera == null)
@@ -282,6 +302,7 @@ namespace GPR202_A3
             _plane.Update(MouseState, _width, _height, deltaTime);
             UpdateBalloons(deltaTime);
             _water?.Update(deltaTime);
+            _effects?.Update(_plane, deltaTime);
             _camera.Follow(_plane.Position, _plane.Forward, deltaTime);
         }
 
@@ -318,8 +339,11 @@ namespace GPR202_A3
                 // Back to filled polygons for the sky and HUD
                 GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
 
-                // Last, so the sky is only drawn where nothing else covers it
+                // Last of the solid things, so the sky is only drawn where nothing else covers it
                 _skybox?.Render(view);
+
+                // See-through, so after everything they can be seen through (including the sky)
+                _effects?.Render(view, _camera.Position);
             }
 
             _hud?.Render();
@@ -438,6 +462,7 @@ namespace GPR202_A3
             UpdateBalloonText();
 
             _plane?.Reset(GetStartPosition(), STARTHEADING);
+            _effects?.Clear(_plane);
             if (_plane != null)
                 _camera?.SnapTo(_plane.Position, _plane.Forward);
         }
@@ -463,6 +488,7 @@ namespace GPR202_A3
                     _balloonsLeft--;
                     UpdateBalloonText();
                     _messageText?.ShowFor($"Balloon collected! {_balloonsLeft} remaining", MessageColor, MESSAGEDURATION);
+                    _effects?.BalloonPop(balloon.Position + _balloonConfettiOffset); // a bit above the balloon's centre
                 }
 
                 // The original never removed them, and kept drawing them at scale 0
@@ -483,7 +509,8 @@ namespace GPR202_A3
         /// <summary>
         /// Debug toggles, on the function keys so the gameplay keys stay free.
         /// </summary>
-        private void HandleDebugKeys(KeyboardState kb)
+        /// <returns>Whether any debug key was pressed.</returns>
+        private bool HandleDebugKeys(KeyboardState kb)
         {
             // F1: next debug view
             if (kb.IsKeyPressed(Keys.F1))
@@ -522,6 +549,23 @@ namespace GPR202_A3
             // F7: debug readouts on/off (for a clean HUD in screenshots)
             if (kb.IsKeyPressed(Keys.F7) && _debugText != null)
                 _debugText.Visible = !_debugText.Visible;
+
+            // F8 / F9: test the balloon pop and crash effects, ahead of the plane (until collisions trigger them)
+            if (_plane != null && _effects != null)
+            {
+                Vector3 ahead = _plane.Position + _plane.Forward * TESTEFFECTDISTANCE;
+                if (kb.IsKeyPressed(Keys.F8))
+                    _effects.BalloonPop(ahead);
+                if (kb.IsKeyPressed(Keys.F9))
+                    _effects.Crash(ahead);
+            }
+
+            foreach (Keys key in DebugKeys)
+            {
+                if (kb.IsKeyPressed(key))
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -530,20 +574,20 @@ namespace GPR202_A3
         private void SetupHud(Hud hud)
         {
             // Game title, top centre
-            _titleText = hud.Add(new TextBlock(new RectTransform(Anchor.TopCentre, ScreenMargin), TITLESCALE,
+            _titleText = hud.Add(new TextBlock(new RectTransform(Anchor.TopCentre, _screenMarginOffset), TITLESCALE,
                 PanelColor, PANELPADDING));
             _titleText.SetText(_title, TitleColor);
 
             // Balloons left, bottom right
-            _balloonText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomRight, ScreenMargin), HUDSCALE,
+            _balloonText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomRight, _screenMarginOffset), HUDSCALE,
                 PanelColor, PANELPADDING));
 
-            // Timed messages, bottom centre (hidden until ShowFor is called)
-            _messageText = hud.Add(new TextBlock(new RectTransform(Anchor.Centre, MessageOffset), HUDSCALE));
+            // Timed messages, below the middle of the screen (hidden until ShowFor is called)
+            _messageText = hud.Add(new TextBlock(new RectTransform(Anchor.Centre, _messageOffset), HUDSCALE));
             _messageText.Visible = false;
 
-            // Debug readouts, top left
-            _debugText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomLeft, ScreenMargin), DEBUGSCALE,
+            // Debug readouts, bottom left
+            _debugText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomLeft, _screenMarginOffset), DEBUGSCALE,
                 PanelColor, PANELPADDING));
         }
 
@@ -554,22 +598,35 @@ namespace GPR202_A3
             _balloonText?.SetText($"Balloons: {_balloonsLeft} / {BALLOONSTOTAL}", BalloonColor);
 
         /// <summary>
-        /// The debug readout lines. The HUD only rebuilds when one of them actually changes
-        /// (the frame timings update twice a second).
+        /// The debug readout lines, refreshed every READOUTINTERVAL seconds. The HUD still only rebuilds
+        /// when one of them actually changes.
         /// </summary>
-        private void UpdateDebugText()
+        private void UpdateDebugText(float deltaTime)
         {
             if (_debugText == null || !_debugText.Visible)
                 return;
 
+            // Only every READOUTINTERVAL seconds (or straight after a debug key)
+            _readoutTimer -= deltaTime;
+            if (_readoutTimer > 0f)
+                return;
+            _readoutTimer = READOUTINTERVAL;
+
             _debugText.SetLine(FRAMELINE, $"Frame: {_frameTimer.AverageFrameMs:0.0} ms ({_frameTimer.AverageFps:0} FPS), " +
                                           $"CPU: {_frameTimer.AverageRenderMs:0.00} ms, GPU: {_frameTimer.AverageGpuMs:0.00} ms",
                 ReadoutColor);
-            _debugText.SetLine(LOADLINE, $"Load: {_loadMs:0} ms", ReadoutColor);
+            int particles = 0;
+            int particleDrawCalls = 0;
+            if (_effects != null)
+            {
+                particles = _effects.AliveCount;
+                particleDrawCalls = _effects.DrawCalls;
+            }
+            _debugText.SetLine(LOADLINE, $"Load: {_loadMs:0} ms  Particles: {particles} ({particleDrawCalls} draw calls)", ReadoutColor);
             _debugText.SetLine(VIEWLINE, $"F1 View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
                                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}",
                 ControlsColor);
-            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  Esc: Quit",
+            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  F8 Pop  F9 Crash  Esc: Quit",
                 ControlsColor);
         }
 
@@ -592,6 +649,7 @@ namespace GPR202_A3
             }
 
             _terrain?.SetProjection(projection);
+            _effects?.SetProjection(projection);
             _skybox?.SetProjection(projection);
             _water?.SetProjection(projection, _camera.NearPlane, _camera.FarPlane);
         }

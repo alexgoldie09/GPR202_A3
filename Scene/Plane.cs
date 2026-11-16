@@ -187,6 +187,17 @@ namespace GPR202_A3.Scene
         }
 
         /// <summary>
+        /// Turns a point on the model (in the model's own units, the same as Blender's) into a world position.
+        /// It follows the plane's position, heading, pitch and bank, so things attached to the model stay attached.
+        /// </summary>
+        public Vector3 GetWorldPoint(Vector3 modelPoint) => Vector3.TransformPosition(modelPoint, _root.LocalMatrix);
+
+        /// <summary>
+        /// Turns a direction on the model into a world direction (rotation only, no position).
+        /// </summary>
+        public Vector3 GetWorldDirection(Vector3 modelDirection) => Vector3.Transform(modelDirection, _root.Rotation);
+        
+        /// <summary>
         /// Moves the plane and levels it out, for a new game.
         /// </summary>
         /// <param name="position">The new position.</param>
