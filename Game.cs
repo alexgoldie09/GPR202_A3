@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using GPR202_A3.Debugging;
+using GPR202_A3.Gameplay;
 using GPR202_A3.Graphics;
 using GPR202_A3.Scene;
 using GPR202_A3.UI;
@@ -18,13 +19,6 @@ namespace GPR202_A3
     internal class Game : GameWindow
     {
         #region Constants
-        // How many balloons each game starts with
-        private const int BALLOONSTOTAL = 8;
-
-        // Where the plane starts: above the oasis, facing +Z
-        private const float STARTHEIGHT = 60f;
-        private const float STARTHEADING = 0f;
-
         // Sunlight for every lit shader. The direction is the way the light travels,
         // from the sun in the skybox's left (-X) face, about 24 degrees above the horizon.
         private static readonly Vector3 SunDirection = new(1f, -0.45f, -0.37f);
@@ -66,15 +60,19 @@ namespace GPR202_A3
         // Lines of the debug block
         private const int FRAMELINE = 0;
         private const int LOADLINE = 1;
-        private const int VIEWLINE = 2;
-        private const int CONTROLSLINE = 3;
+        private const int TERRAINLINE = 2;
+        private const int VIEWLINE = 3;
+        private const int CONTROLSLINE = 4;
+
+        // For showing triangle counts in thousands
+        private const float THOUSAND = 1000f;
 
         // Seconds between debug readout refreshes (the frame timings only change this often anyway,
         // and the particle count would otherwise change, and rebuild the HUD, every frame)
         private const float READOUTINTERVAL = 0.5f;
 
         // Every debug key (pressing one refreshes the debug readout straight away)
-        private static readonly Keys[] DebugKeys = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7, Keys.F8, Keys.F9];
+        private static readonly Keys[] DebugKeys = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7, Keys.F8, Keys.F9, Keys.F10];
 
         // How far ahead of the plane the F8 and F9 test effects go off, so they're in view
         private const float TESTEFFECTDISTANCE = 25f;
@@ -140,8 +138,7 @@ namespace GPR202_A3
         private Vector3 _balloonConfettiOffset = new(0f, 10f, 0f);
 
         // Game state
-        private readonly List<BalloonState> _balloons = new();
-        private int _balloonsLeft;
+        private readonly GameManager _gameManager = new();
         #endregion
 
         #region Constructors
@@ -202,8 +199,8 @@ namespace GPR202_A3
             _framebufferSize = FramebufferSize;
             _water = new Water(_framebufferSize.X, _framebufferSize.Y);
             _water.SetLighting(SunDirection, SunColor);
-            _terrain.CreatePatch(Vector2.Zero, Water.HalfSize); // the oasis is at the centre
-            _plane = new Plane(GetStartPosition());
+            _terrain.SetArea(Vector2.Zero, Water.HalfSize); // the refraction pass only needs the oasis, at the centre
+            _plane = new Plane(GameManager.GetStartPosition());
             _balloonModel = new Balloon();
             _props = new Props(); // after the terrain, since placement reads its heights
             _effects = new Effects();
@@ -214,7 +211,8 @@ namespace GPR202_A3
             CursorState = CursorState.Grabbed; // hide the cursor and keep it in the window
 
             // --- Start a new game ---
-            SetupNewGame();
+            _gameManager.BalloonCollected += OnBalloonCollected;
+            StartNewGame();
 
             loadTimer.Stop();
             _loadMs = loadTimer.Elapsed.TotalMilliseconds;
@@ -300,7 +298,7 @@ namespace GPR202_A3
                 return;
 
             _plane.Update(MouseState, _width, _height, deltaTime);
-            UpdateBalloons(deltaTime);
+            _gameManager.Update(_plane, deltaTime);
             _water?.Update(deltaTime);
             _effects?.Update(_plane, deltaTime);
             _camera.Follow(_plane.Position, _plane.Forward, deltaTime);
@@ -318,6 +316,10 @@ namespace GPR202_A3
             if (_camera != null)
             {
                 Matrix4 view = _camera.GetViewMatrix();
+
+                // Terrain detail levels for this frame, from the real camera (every pass uses the same ones)
+                _terrain?.SelectLevels(_camera.Position);
+
                 bool drawWater = _useWater && _water != null && _water.IsVisible(view, _camera.GetProjectionMatrix());
 
                 if (drawWater && _water != null)
@@ -362,8 +364,8 @@ namespace GPR202_A3
         /// <param name="cameraPosition">The camera position for this pass (for highlights and reflections).</param>
         /// <param name="clipPlane">The clip plane for this pass (only used while clipping is enabled).</param>
         /// <param name="drawModels">Whether to draw the plane, balloons and props (the refraction pass skips them).</param>
-        /// <param name="terrainPatchOnly">Whether to draw only the terrain under the water.</param>
-        private void RenderScene(Matrix4 view, Vector3 cameraPosition, Vector4 clipPlane, bool drawModels, bool terrainPatchOnly = false)
+        /// <param name="terrainAreaOnly">Whether to draw only the terrain under the water.</param>
+        private void RenderScene(Matrix4 view, Vector3 cameraPosition, Vector4 clipPlane, bool drawModels, bool terrainAreaOnly = false)
         {
             // Each pass binds its textures again, so materials can't skip themselves based on an earlier pass
             Material.ResetLastApplied();
@@ -374,7 +376,7 @@ namespace GPR202_A3
                 _plane?.Render(_modelShader);
                 if (_balloonModel != null)
                 {
-                    foreach (var balloon in _balloons)
+                    foreach (var balloon in _gameManager.Balloons)
                         _balloonModel.Render(_modelShader, balloon);
                 }
             }
@@ -386,7 +388,7 @@ namespace GPR202_A3
             }
 
             // After the models, so terrain pixels hidden behind them are skipped by the depth test
-            _terrain?.Render(view, clipPlane, _debugView, _useLighting, terrainPatchOnly);
+            _terrain?.Render(view, clipPlane, _debugView, _useLighting, terrainAreaOnly);
         }
 
         /// <summary>
@@ -436,7 +438,7 @@ namespace GPR202_A3
 
             // Refraction: only the terrain under the water (the plane and balloons are never under it)
             water.BeginRefraction();
-            RenderScene(camera.GetViewMatrix(), camera.Position, water.RefractionClipPlane, drawModels: false, terrainPatchOnly: true);
+            RenderScene(camera.GetViewMatrix(), camera.Position, water.RefractionClipPlane, drawModels: false, terrainAreaOnly: true);
 
             GL.Disable(EnableCap.ClipDistance0);
 
@@ -446,64 +448,27 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Resets the balloons and the plane for a new game.
+        /// Starts a new game: the GameManager resets the balloons and the plane, and Game resets what's on screen.
         /// </summary>
-        private void SetupNewGame()
-        {
-            _balloons.Clear();
-            for (int i = 0; i < BALLOONSTOTAL; i++)
-            {
-                var balloon = new BalloonState();
-                balloon.Spawn();
-                _balloons.Add(balloon);
-            }
-
-            _balloonsLeft = BALLOONSTOTAL;
-            UpdateBalloonText();
-
-            _plane?.Reset(GetStartPosition(), STARTHEADING);
-            _effects?.Clear(_plane);
-            if (_plane != null)
-                _camera?.SnapTo(_plane.Position, _plane.Forward);
-        }
-
-        /// <summary>
-        /// Updates the balloons, counts new collections, and removes balloons that have finished animating.
-        /// </summary>
-        private void UpdateBalloons(float deltaTime)
+        private void StartNewGame()
         {
             if (_plane == null)
                 return;
 
-            // Backwards so removing doesn't skip entries
-            for (int i = _balloons.Count - 1; i >= 0; i--)
-            {
-                BalloonState balloon = _balloons[i];
-                bool wasCollected = balloon.Collected;
-
-                balloon.Update(_plane.Position, deltaTime);
-
-                if (!wasCollected && balloon.Collected)
-                {
-                    _balloonsLeft--;
-                    UpdateBalloonText();
-                    _messageText?.ShowFor($"Balloon collected! {_balloonsLeft} remaining", MessageColor, MESSAGEDURATION);
-                    _effects?.BalloonPop(balloon.Position + _balloonConfettiOffset); // a bit above the balloon's centre
-                }
-
-                // The original never removed them, and kept drawing them at scale 0
-                if (balloon.Finished)
-                    _balloons.RemoveAt(i);
-            }
+            _gameManager.StartNewGame(_plane);
+            UpdateBalloonText();
+            _effects?.Clear(_plane);
+            _camera?.SnapTo(_plane.Position, _plane.Forward);
         }
 
         /// <summary>
-        /// The plane's starting point, above the oasis.
+        /// What happens on screen when the GameManager says a balloon was collected.
         /// </summary>
-        private static Vector3 GetStartPosition()
+        private void OnBalloonCollected(BalloonState balloon)
         {
-            float ground = MathF.Max(Terrain.GetHeightAt(0f, 0f), Terrain.WaterLevel);
-            return new Vector3(0f, ground + STARTHEIGHT, 0f);
+            UpdateBalloonText();
+            _messageText?.ShowFor($"Balloon collected! {_gameManager.BalloonsLeft} remaining", MessageColor, MESSAGEDURATION);
+            _effects?.BalloonPop(balloon.Position + _balloonConfettiOffset); // a bit above the balloon's centre
         }
 
         /// <summary>
@@ -560,6 +525,10 @@ namespace GPR202_A3
                     _effects.Crash(ahead);
             }
 
+            // F10: terrain level of detail and culling on/off (off draws every patch at full detail, to measure the saving)
+            if (kb.IsKeyPressed(Keys.F10) && _terrain != null)
+                _terrain.LodEnabled = !_terrain.LodEnabled;
+
             foreach (Keys key in DebugKeys)
             {
                 if (kb.IsKeyPressed(key))
@@ -595,7 +564,7 @@ namespace GPR202_A3
         /// Shows how many balloons are left. Only called when the count changes.
         /// </summary>
         private void UpdateBalloonText() =>
-            _balloonText?.SetText($"Balloons: {_balloonsLeft} / {BALLOONSTOTAL}", BalloonColor);
+            _balloonText?.SetText($"Balloons: {_gameManager.BalloonsLeft} / {_gameManager.BalloonsTotal}", BalloonColor);
 
         /// <summary>
         /// The debug readout lines, refreshed every READOUTINTERVAL seconds. The HUD still only rebuilds
@@ -623,6 +592,19 @@ namespace GPR202_A3
                 particleDrawCalls = _effects.DrawCalls;
             }
             _debugText.SetLine(LOADLINE, $"Load: {_loadMs:0} ms  Particles: {particles} ({particleDrawCalls} draw calls)", ReadoutColor);
+            int patchesDrawn = 0;
+            int patchCount = 0;
+            float trianglesK = 0f;
+            bool lodOn = false;
+            if (_terrain != null)
+            {
+                patchesDrawn = _terrain.PatchesDrawn;
+                patchCount = _terrain.PatchCount;
+                trianglesK = _terrain.TrianglesDrawn / THOUSAND;
+                lodOn = _terrain.LodEnabled;
+            }
+            _debugText.SetLine(TERRAINLINE, $"Terrain: {patchesDrawn}/{patchCount} patches, {trianglesK:0}k triangles  F10 LOD: {OnOff(lodOn)}",
+                ReadoutColor);
             _debugText.SetLine(VIEWLINE, $"F1 View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
                                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}",
                 ControlsColor);

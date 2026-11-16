@@ -1,7 +1,6 @@
 #version 330 core
 
 in vec3 WorldPos; // world-space position
-in vec3 WorldNormal; // world-space normal
 
 out vec4 FragColor;
 
@@ -18,6 +17,9 @@ const vec3 WIREFRAMECOLOR = vec3(1.0, 1.0, 0.0);
 
 uniform sampler2D SandColorMap; // tiling sand colour (unit 1)
 uniform sampler2D SandNormalMap; // tiling ripples, normal map (unit 2)
+uniform sampler2D TerrainNormalMap; // the terrain's own surface normal at every grid point (unit 3)
+uniform int GridSize; // vertices along each side
+uniform float GridSpacing; // world units between vertices
 uniform float SandTileSize; // world units per repeat of the sand colour
 uniform float RippleTileSize; // world units per repeat of the ripples
 uniform float WaterLevel; // height of the oasis water
@@ -37,7 +39,12 @@ void main()
     vec2 rippleUV = WorldPos.xz / RippleTileSize;
 
     // --- Normal ---
-    vec3 N = normalize(WorldNormal);
+    // Read from the normal map at this pixel, not passed from the vertices: the lighting keeps the full grid's
+    // detail even where a far patch is drawn with fewer vertices, so level changes are hard to spot.
+    // World x and z to grid position, then to the centre of that texel.
+    float halfSize = float(GridSize - 1) * GridSpacing / 2.0;
+    vec2 normalUV = ((WorldPos.xz + halfSize) / GridSpacing + 0.5) / float(GridSize);
+    vec3 N = normalize(texture(TerrainNormalMap, normalUV).rgb * 2.0 - 1.0);
 
     // The textures run along world X (U) and Z (V), so the tangent is +X made perpendicular to the normal.
     // T, B and N turn the ripple normal map into world space.

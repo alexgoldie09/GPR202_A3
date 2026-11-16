@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using GPR202_A3.Debugging;
 using GPR202_A3.Generation;
 using GPR202_A3.Graphics;
@@ -12,15 +12,18 @@ namespace GPR202_A3.Scene
     /// The desert landscape. The heights are generated once at load and stored in a texture; the vertex shader
     /// builds each vertex from that texture, so the terrain has no vertex buffer. A CPU copy of the heights is
     /// kept for GetHeightAt, and craters change both copies while the game runs.
+    /// It's drawn in patches with level of detail (TerrainLod), and lit per pixel from a normal map, so the
+    /// lighting stays at full detail when a patch drops to a coarser level.
     /// </summary>
     internal class Terrain
     {
         #region Constants
-        // Vertices along each side (the original used 2048). The world size stays the same, only the spacing changes.
-        private const int GRIDSIZE = 1024;
+        // Vertices along each side. 2049 = 32 patches of 64 squares (TerrainLod needs a whole number of patches).
+        private const int GRIDSIZE = 2049;
 
-        // Width and length of the terrain, in world units (the same as the original)
-        private const float WORLDSIZE = 2048f;
+        // Width and length of the terrain, in world units: twice the play area, so the desert carries on past it.
+        // With 2049 vertices, that's exactly 2 units between vertices.
+        private const float WORLDSIZE = 4096f;
 
         // Seed for the desert generator (change it for a different desert)
         private const int SEED = 2026;
@@ -37,14 +40,15 @@ namespace GPR202_A3.Scene
         private const int HEIGHTMAPUNIT = 0;
         private const int SANDCOLORUNIT = 1;
         private const int SANDNORMALUNIT = 2;
+        private const int TERRAINNORMALUNIT = 3;
 
         // Colours used if a sand texture is missing: plain sand, and a flat normal (pointing straight out)
         private static readonly (byte R, byte G, byte B) FallbackSandColor = (220, 180, 125);
         private static readonly (byte R, byte G, byte B) FlatNormalColor = (128, 128, 255);
 
-        // Index that ends one triangle strip and starts the next (primitive restart).
-        // The largest possible index, so it is never a real vertex.
-        private const uint RESTARTINDEX = uint.MaxValue;
+        // Bytes per pixel in the normal map (red, green, blue, alpha), and the largest byte value
+        private const int CHANNELS = 4;
+        private const float MAXBYTE = 255f;
 
         // How far out a crater changes the terrain, as a multiple of its radius.
         // The rim has faded to almost nothing by then, so there is no step at the edge of the changed area.
@@ -77,6 +81,30 @@ namespace GPR202_A3.Scene
         /// Height of the oasis water's surface.
         /// </summary>
         public static float WaterLevel => WATERLEVEL;
+
+        /// <summary>
+        /// Whether level of detail and culling are on (F10 turns them off, to measure the difference).
+        /// </summary>
+        public bool LodEnabled
+        {
+            get => _lod.Enabled;
+            set => _lod.Enabled = value;
+        }
+
+        /// <summary>
+        /// Patches in the whole terrain.
+        /// </summary>
+        public int PatchCount => _lod.PatchCount;
+
+        /// <summary>
+        /// Patches drawn by the last Render (the main pass is drawn last each frame).
+        /// </summary>
+        public int PatchesDrawn => _lod.PatchesDrawn;
+
+        /// <summary>
+        /// Triangles drawn by the last Render.
+        /// </summary>
+        public int TrianglesDrawn => _lod.TrianglesDrawn;
         #endregion
 
         #region Private Fields
@@ -91,15 +119,11 @@ namespace GPR202_A3.Scene
         private readonly HeightMapTexture _heightMap;
         private readonly Texture _sandColor;
         private readonly Texture _sandNormal;
-        private readonly VAO _vao;
-        private readonly IBO _ibo;
-        private readonly int _indexCount;
+        private readonly Texture _normalMap;
+        private readonly TerrainLod _lod;
 
-        // A smaller square of the grid that can be drawn on its own (e.g. only the area under the water).
-        // It has its own index buffer, but uses the same height texture and shader.
-        private VAO? _patchVao;
-        private IBO? _patchIbo;
-        private int _patchIndexCount;
+        // Kept for culling (view * projection)
+        private Matrix4 _projection = Matrix4.Identity;
         #endregion
 
         #region Constructors
@@ -115,13 +139,11 @@ namespace GPR202_A3.Scene
             double generateMs = timer.Elapsed.TotalMilliseconds;
             _heightMap = new HeightMapTexture(_heights, GRIDSIZE, HEIGHTMAPUNIT);
 
-            // --- Indices only ---
-            // The VAO has no vertex attributes, but core OpenGL still needs one bound to draw, and it remembers the IBO
-            List<uint> indices = BuildStripIndices(0, GRIDSIZE - 1, 0, GRIDSIZE - 1);
-            _vao = new VAO(); // binds itself, so the IBO below is stored in it
-            _ibo = new IBO(indices);
-            _vao.Unbind();
-            _indexCount = indices.Count;
+            // --- Surface normals, one per vertex, for per-pixel lighting ---
+            _normalMap = new Texture(BuildNormals(0, 0, GRIDSIZE - 1, GRIDSIZE - 1), GRIDSIZE, GRIDSIZE, TERRAINNORMALUNIT);
+
+            // --- Patches and their detail levels (the shared index lists) ---
+            _lod = new TerrainLod(_heights, GRIDSIZE, Spacing);
 
             // --- Sand textures ---
             _sandColor = LoadTextureOrDefault("Terrain/SandColor.png", SANDCOLORUNIT, FallbackSandColor);
@@ -133,6 +155,7 @@ namespace GPR202_A3.Scene
             _shader.SetInt("HeightMap", HEIGHTMAPUNIT);
             _shader.SetInt("SandColorMap", SANDCOLORUNIT);
             _shader.SetInt("SandNormalMap", SANDNORMALUNIT);
+            _shader.SetInt("TerrainNormalMap", TERRAINNORMALUNIT);
             _shader.SetInt("GridSize", GRIDSIZE);
             _shader.SetFloat("GridSpacing", Spacing);
             _shader.SetFloat("SandTileSize", SANDTILESIZE);
@@ -140,9 +163,9 @@ namespace GPR202_A3.Scene
             _shader.SetFloat("WaterLevel", WATERLEVEL);
 
             timer.Stop();
-            double indexMB = (long)_indexCount * sizeof(uint) / BYTESPERMB;
+            double indexMB = (long)_lod.IndexCount * sizeof(uint) / BYTESPERMB;
             Log.Info($"Terrain: {GRIDSIZE}x{GRIDSIZE} grid, generated in {generateMs:0} ms, total {timer.Elapsed.TotalMilliseconds:0} ms");
-            Log.Info($"Terrain: 0 vertex bytes, {indexMB:0.0} MB of indices ({_indexCount} strip indices)");
+            Log.Info($"Terrain: {_lod.PatchCount} patches, 0 vertex bytes, {indexMB:0.0} MB of shared indices ({_lod.IndexCount})");
             Log.CheckGLError("Terrain setup");
         }
         #endregion
@@ -220,30 +243,30 @@ namespace GPR202_A3.Scene
             }
 
             _heightMap.UpdateRegion(minX, minZ, width, height, region);
+
+            // The patches' bounding boxes, and the normals (one further out, since a normal uses its neighbours)
+            _lod.UpdateBounds(_heights, minX, minZ, maxX, maxZ);
+            int normalMinX = Math.Max(0, minX - 1);
+            int normalMinZ = Math.Max(0, minZ - 1);
+            int normalMaxX = Math.Min(GRIDSIZE - 1, maxX + 1);
+            int normalMaxZ = Math.Min(GRIDSIZE - 1, maxZ + 1);
+            _normalMap.UpdateRegion(normalMinX, normalMinZ, normalMaxX - normalMinX + 1, normalMaxZ - normalMinZ + 1,
+                BuildNormals(normalMinX, normalMinZ, normalMaxX, normalMaxZ));
         }
 
         /// <summary>
-        /// Sets up the patch: a square of the terrain that Render can draw on its own, instead of the whole grid.
+        /// Sets the area Render draws when asked for areaOnly: a square of the terrain.
         /// The water's refraction pass uses it, since it only ever sees the terrain under the water.
         /// </summary>
         /// <param name="centre">The square's centre in world x and z.</param>
         /// <param name="halfSize">Half the square's width, in world units.</param>
-        public void CreatePatch(Vector2 centre, float halfSize)
-        {
-            _patchVao?.Delete();
-            _patchIbo?.Delete();
+        public void SetArea(Vector2 centre, float halfSize) => _lod.SetArea(centre, halfSize);
 
-            List<uint> indices = BuildStripIndices(
-                WorldToGrid(centre.X - halfSize, MathF.Floor), WorldToGrid(centre.X + halfSize, MathF.Ceiling),
-                WorldToGrid(centre.Y - halfSize, MathF.Floor), WorldToGrid(centre.Y + halfSize, MathF.Ceiling));
-
-            _patchVao = new VAO(); // binds itself, so the IBO below is stored in it
-            _patchIbo = new IBO(indices);
-            _patchVao.Unbind();
-            _patchIndexCount = indices.Count;
-
-            Log.Info($"Terrain patch: {_patchIndexCount} indices ({100.0 * _patchIndexCount / _indexCount:0.0}% of the grid)");
-        }
+        /// <summary>
+        /// Picks each patch's detail level from its distance to the camera. Call once per frame, before rendering.
+        /// Every pass that frame (reflection, refraction, main) uses the same levels, so they all match.
+        /// </summary>
+        public void SelectLevels(Vector3 cameraPosition) => _lod.SelectLevels(cameraPosition);
 
         /// <summary>
         /// Uploads the sunlight settings. Call once on load.
@@ -261,19 +284,20 @@ namespace GPR202_A3.Scene
         /// </summary>
         public void SetProjection(Matrix4 projection)
         {
+            _projection = projection;
             _shader.Bind();
             _shader.SetMatrix4("projection", projection);
         }
 
         /// <summary>
-        /// Draws the terrain.
+        /// Draws the patches the camera can see, each at its detail level.
         /// </summary>
-        /// <param name="view">The camera's view matrix.</param>
+        /// <param name="view">This pass's view matrix.</param>
         /// <param name="clipPlane">The water pass's clip plane (only used while clipping is enabled).</param>
         /// <param name="debugView">The current debug view.</param>
         /// <param name="useLighting">Whether to light the terrain.</param>
-        /// <param name="patchOnly">true to draw only the patch (see CreatePatch), if there is one.</param>
-        public void Render(Matrix4 view, Vector4 clipPlane, DebugView debugView, bool useLighting, bool patchOnly = false)
+        /// <param name="areaOnly">true to draw only the area set by SetArea.</param>
+        public void Render(Matrix4 view, Vector4 clipPlane, DebugView debugView, bool useLighting, bool areaOnly = false)
         {
             _shader.Bind();
             _shader.SetMatrix4("view", view);
@@ -284,25 +308,9 @@ namespace GPR202_A3.Scene
             _heightMap.Bind();
             _sandColor.Bind();
             _sandNormal.Bind();
+            _normalMap.Bind();
 
-            // The restart index ends each row's strip, so the whole grid is one draw call
-            GL.Enable(EnableCap.PrimitiveRestart);
-            GL.PrimitiveRestartIndex(RESTARTINDEX);
-
-            // The whole grid, or just the patch
-            VAO vao = _vao;
-            int indexCount = _indexCount;
-            if (patchOnly && _patchVao != null)
-            {
-                vao = _patchVao;
-                indexCount = _patchIndexCount;
-            }
-
-            vao.Bind();
-            GL.DrawElements(PrimitiveType.TriangleStrip, indexCount, DrawElementsType.UnsignedInt, 0);
-            vao.Unbind();
-
-            GL.Disable(EnableCap.PrimitiveRestart);
+            _lod.Draw(view * _projection, areaOnly);
         }
 
         /// <summary>
@@ -314,43 +322,50 @@ namespace GPR202_A3.Scene
             _heightMap.Delete();
             _sandColor.Delete();
             _sandNormal.Delete();
-            _vao.Delete();
-            _ibo.Delete();
-            _patchVao?.Delete();
-            _patchIbo?.Delete();
+            _normalMap.Delete();
+            _lod.Delete();
         }
         #endregion
 
         #region Helper Methods
         /// <summary>
-        /// Builds one triangle strip per row of a rectangle of the grid, separated by restart indices.
-        /// A strip zig-zags between two rows: (x, z), (x, z + 1), (x + 1, z), ... so each grid square costs
-        /// 2 indices instead of 6. Starting on row z makes the triangles face up (counter-clockwise from above).
+        /// Works out the surface normal at every grid point in a rectangle, as normal map pixels.
+        /// Each normal comes from its neighbours' heights: if the ground rises to the right, the normal leans left.
         /// </summary>
-        /// <param name="minX">First column.</param>
-        /// <param name="maxX">Last column.</param>
-        /// <param name="minZ">First row.</param>
-        /// <param name="maxZ">Last row.</param>
-        private static List<uint> BuildStripIndices(int minX, int maxX, int minZ, int maxZ)
+        /// <returns>The rectangle's normals as RGBA bytes, row by row (each axis -1..1 stored as 0..255).</returns>
+        private static byte[] BuildNormals(int minX, int minZ, int maxX, int maxZ)
         {
-            // Each row: 2 indices per column, plus 1 restart index
-            int columns = maxX - minX + 1;
-            var indices = new List<uint>((maxZ - minZ) * (2 * columns + 1));
+            int width = maxX - minX + 1;
+            int height = maxZ - minZ + 1;
+            byte[] pixels = new byte[width * height * CHANNELS];
 
-            for (int z = minZ; z < maxZ; z++)
+            Parallel.For(0, height, row =>
             {
+                int z = minZ + row;
                 for (int x = minX; x <= maxX; x++)
                 {
-                    // Vertex (x, z) is number z * GRIDSIZE + x; the vertex shader turns it back into x and z
-                    indices.Add((uint)(z * GRIDSIZE + x));
-                    indices.Add((uint)((z + 1) * GRIDSIZE + x));
+                    // Neighbours past the edge use the edge
+                    float left = GetHeightMapAt(Math.Max(x - 1, 0), z);
+                    float right = GetHeightMapAt(Math.Min(x + 1, GRIDSIZE - 1), z);
+                    float down = GetHeightMapAt(x, Math.Max(z - 1, 0));
+                    float up = GetHeightMapAt(x, Math.Min(z + 1, GRIDSIZE - 1));
+                    Vector3 normal = Vector3.Normalize(new Vector3(left - right, 2f * Spacing, down - up));
+
+                    int i = (row * width + (x - minX)) * CHANNELS;
+                    pixels[i] = ToByte(normal.X);
+                    pixels[i + 1] = ToByte(normal.Y);
+                    pixels[i + 2] = ToByte(normal.Z);
+                    pixels[i + 3] = (byte)MAXBYTE;
                 }
+            });
 
-                indices.Add(RESTARTINDEX);
-            }
-
-            return indices;
+            return pixels;
         }
+
+        /// <summary>
+        /// A -1..1 value stored as a 0..255 byte.
+        /// </summary>
+        private static byte ToByte(float value) => (byte)MathF.Round((value * 0.5f + 0.5f) * MAXBYTE);
 
         /// <summary>
         /// Converts a world x or z to a grid index, rounded with the given function and kept inside the grid.

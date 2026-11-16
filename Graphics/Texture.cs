@@ -156,6 +156,24 @@ namespace GPR202_A3.Graphics
         }
         #endregion
 
+        #region Public API
+        /// <summary>
+        /// Replaces a rectangle of a texture made from pixels in code (e.g. the terrain's normals under a crater),
+        /// then rebuilds the mipmaps so distant views match.
+        /// </summary>
+        /// <param name="x">Left edge of the rectangle, in pixels.</param>
+        /// <param name="y">Top row of the rectangle, in pixels.</param>
+        /// <param name="width">Width of the rectangle.</param>
+        /// <param name="height">Height of the rectangle.</param>
+        /// <param name="pixels">width * height RGBA pixels, row by row.</param>
+        public void UpdateRegion(int x, int y, int width, int height, byte[] pixels)
+        {
+            Bind();
+            GL.TexSubImage2D(TextureTarget.Texture2D, 0, x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+            GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
+        }
+        #endregion
+
         #region IGraphicsResources Functions
         /// <summary>
         /// Binds the texture to a texture unit it is assigned to.

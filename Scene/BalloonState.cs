@@ -1,4 +1,5 @@
-﻿using OpenTK.Mathematics;
+using GPR202_A3.Gameplay;
+using OpenTK.Mathematics;
 
 namespace GPR202_A3.Scene
 {
@@ -74,8 +75,8 @@ namespace GPR202_A3.Scene
         /// </summary>
         public void Spawn()
         {
-            // A random position, SPAWNMARGIN in from the edges
-            float range = Terrain.Size / 2f - SPAWNMARGIN;
+            // A random position, SPAWNMARGIN in from the edges of the play area
+            float range = PlayArea.HalfSize - SPAWNMARGIN;
             float x = RandomBetween(-range, range);
             float z = RandomBetween(-range, range);
             float height = Random.Next(MINSPAWNHEIGHT, MAXSPAWNHEIGHT);
