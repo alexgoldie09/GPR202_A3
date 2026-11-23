@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
+using GPR202_A3.Collision;
 using GPR202_A3.Debugging;
 using GPR202_A3.Gameplay;
 using GPR202_A3.Graphics;
@@ -25,7 +26,7 @@ namespace GPR202_A3
         private static readonly Vector3 SunColor = new(1f, 0.95f, 0.85f); // warm desert sunlight
         private const float AMBIENTSTRENGTH = 0.45f;
 
-        // Size of the F5 debug crater (later, crashes and missiles make craters instead)
+        // Size of the crater a crash into the sand leaves (F5 makes one under the plane too)
         private const float CRATERRADIUS = 18f;
         private const float CRATERDEPTH = 8f;
 
@@ -39,6 +40,7 @@ namespace GPR202_A3
         private const int TITLESCALE = 3;
         private const int HUDSCALE = 2;
         private const int DEBUGSCALE = 1;
+        private const int ALERTSCALE = 3;
 
         // HUD backgrounds: dark and see-through, with a few pixels around the text
         private static readonly Color4 PanelColor = new(0f, 0f, 0f, 0.45f);
@@ -50,6 +52,8 @@ namespace GPR202_A3
         private static readonly Color4 MessageColor = Color4.Yellow;
         private static readonly Color4 ReadoutColor = Color4.White;
         private static readonly Color4 ControlsColor = Color4.Plum;
+        private static readonly Color4 WarningColor = Color4.OrangeRed;
+        private static readonly Color4 WinColor = Color4.Gold;
 
         // Seconds a message like "Balloon collected!" stays on screen
         private const float MESSAGEDURATION = 3f;
@@ -115,11 +119,14 @@ namespace GPR202_A3
         private TextBlock? _balloonText;
         private TextBlock? _messageText;
         private TextBlock? _debugText;
+        private TextBlock? _alertText; // "Turn back!", crashed and won, a bit above the middle
         
         // Gap between the HUD and the screen edges, in pixels
         private Vector2 _screenMarginOffset = new(12f, 12f);
         // Where the timed message sits: centred across the screen, 180 pixels below the middle
         private Vector2 _messageOffset = new(0f, 180f);
+        // Where the alerts sit: centred across the screen, 120 pixels above the middle
+        private Vector2 _alertOffset = new(0f, -120f);
 
         // Counts down to the next debug readout refresh
         private float _readoutTimer;
@@ -133,7 +140,7 @@ namespace GPR202_A3
         private Props? _props;
         private Effects? _effects;
 
-        // Fog settings, shared by every world shader (F11 changes the mode)
+        // Fog settings, shared by every world shader (F12 changes the mode)
         private Fog? _fog;
         private Water? _water;
         
@@ -142,6 +149,9 @@ namespace GPR202_A3
 
         // Game state
         private readonly GameManager _gameManager = new();
+
+        // What the plane last crashed into, for the crash message
+        private HitSurface _crashSurface;
         #endregion
 
         #region Constructors
@@ -217,7 +227,11 @@ namespace GPR202_A3
 
             // --- Start a new game ---
             _gameManager.BalloonCollected += OnBalloonCollected;
-            StartNewGame();
+            _gameManager.PlaneCrashed += OnPlaneCrashed;
+            _gameManager.GameWon += OnGameWon;
+            _gameManager.GameStarted += OnGameStarted;
+            _gameManager.SetObstacles(_props.Colliders);
+            _gameManager.StartNewGame(_plane);
 
             loadTimer.Stop();
             _loadMs = loadTimer.Elapsed.TotalMilliseconds;
@@ -287,7 +301,7 @@ namespace GPR202_A3
             _hud?.Update(deltaTime);
 
             KeyboardState kb = KeyboardState;
-            if (kb.IsKeyPressed(Keys.Escape))
+            if (kb.IsKeyPressed(Keys.Escape) || kb.IsKeyPressed(Keys.Q))
             {
                 Close();
                 return;
@@ -302,10 +316,15 @@ namespace GPR202_A3
             if (!IsFocused || _plane == null || _camera == null)
                 return;
 
-            _plane.Update(MouseState, _width, _height, deltaTime);
+            // A crashed plane stays where it crashed (hidden), so the camera keeps watching the fire
+            if (!_gameManager.PlaneDestroyed)
+                _plane.Update(MouseState, _width, _height, deltaTime);
             _gameManager.Update(_plane, deltaTime);
+            UpdateAlertText();
+
+            Plane? trailPlane = _gameManager.PlaneDestroyed ? null : _plane; // no smoke trail once it's gone
             _water?.Update(deltaTime);
-            _effects?.Update(_plane, deltaTime);
+            _effects?.Update(trailPlane, deltaTime);
             _camera.Follow(_plane.Position, _plane.Forward, deltaTime);
         }
 
@@ -378,7 +397,8 @@ namespace GPR202_A3
             if (drawModels && _modelShader != null)
             {
                 SetPassUniforms(_modelShader, view, cameraPosition, clipPlane);
-                _plane?.Render(_modelShader);
+                if (!_gameManager.PlaneDestroyed)
+                    _plane?.Render(_modelShader);
                 if (_balloonModel != null)
                 {
                     foreach (var balloon in _gameManager.Balloons)
@@ -453,17 +473,42 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Starts a new game: the GameManager resets the balloons and the plane, and Game resets what's on screen.
+        /// What happens on screen when the GameManager starts a new game (it has already reset the balloons and the plane).
         /// </summary>
-        private void StartNewGame()
+        private void OnGameStarted()
         {
             if (_plane == null)
                 return;
 
-            _gameManager.StartNewGame(_plane);
             UpdateBalloonText();
+            if (_messageText != null)
+                _messageText.Visible = false;
             _effects?.Clear(_plane);
             _camera?.SnapTo(_plane.Position, _plane.Forward);
+        }
+
+        /// <summary>
+        /// What happens on screen when the plane crashes: a crater if it hit the sand, then the fire and smoke.
+        /// </summary>
+        private void OnPlaneCrashed(HitSurface surface, Vector3 point)
+        {
+            _crashSurface = surface;
+
+            // Crater first, so the fire starts on the crater's floor
+            if (surface == HitSurface.Ground)
+                _terrain?.AddCrater(point, CRATERRADIUS, CRATERDEPTH);
+
+            _effects?.Crash(point);
+        }
+
+        /// <summary>
+        /// What happens on screen when the last balloon is collected.
+        /// </summary>
+        private void OnGameWon()
+        {
+            // The alert says it instead
+            if (_messageText != null)
+                _messageText.Visible = false;
         }
 
         /// <summary>
@@ -520,7 +565,7 @@ namespace GPR202_A3
             if (kb.IsKeyPressed(Keys.F7) && _debugText != null)
                 _debugText.Visible = !_debugText.Visible;
 
-            // F8 / F9: test the balloon pop and crash effects, ahead of the plane (until collisions trigger them)
+            // F8 / F9: test the balloon pop and crash effects, ahead of the plane
             if (_plane != null && _effects != null)
             {
                 Vector3 ahead = _plane.Position + _plane.Forward * TESTEFFECTDISTANCE;
@@ -570,6 +615,11 @@ namespace GPR202_A3
             // Debug readouts, bottom left
             _debugText = hud.Add(new TextBlock(new RectTransform(Anchor.BottomLeft, _screenMarginOffset), DEBUGSCALE,
                 PanelColor, PANELPADDING));
+
+            // Alerts, above the middle of the screen (hidden while there's nothing to say)
+            _alertText = hud.Add(new TextBlock(new RectTransform(Anchor.Centre, _alertOffset), ALERTSCALE,
+                PanelColor, PANELPADDING));
+            _alertText.Visible = false;
         }
 
         /// <summary>
@@ -577,6 +627,58 @@ namespace GPR202_A3
         /// </summary>
         private void UpdateBalloonText() =>
             _balloonText?.SetText($"Balloons: {_gameManager.BalloonsLeft} / {_gameManager.BalloonsTotal}", BalloonColor);
+
+        /// <summary>
+        /// Shows the alert for what's happening: "Turn back!" outside the play area, or the crash or win message
+        /// with the countdown to the next game. Called every update, but the HUD only rebuilds when the text changes
+        /// (once a second, as the countdown ticks).
+        /// </summary>
+        private void UpdateAlertText()
+        {
+            if (_alertText == null)
+                return;
+
+            int secondsLeft = (int)MathF.Ceiling(_gameManager.ResetTimeLeft);
+
+            if (_gameManager.State == GameState.Won)
+            {
+                _alertText.SetText($"All balloons collected!\nNew game in {secondsLeft}", WinColor);
+                _alertText.Visible = true;
+            }
+            else if (_gameManager.State == GameState.Crashed)
+            {
+                _alertText.SetText($"{CrashMessage(_crashSurface)}\nNew game in {secondsLeft}", WarningColor);
+                _alertText.Visible = true;
+            }
+            else if (_gameManager.OutOfBounds)
+            {
+                int boundsSecondsLeft = (int)MathF.Ceiling(_gameManager.OutOfBoundsTimeLeft);
+                _alertText.SetText($"Turn back!\n{boundsSecondsLeft}", WarningColor);
+                _alertText.Visible = true;
+            }
+            else
+            {
+                _alertText.Visible = false;
+            }
+        }
+
+        /// <summary>
+        /// The crash message for what the plane hit.
+        /// </summary>
+        private static string CrashMessage(HitSurface surface)
+        {
+            switch (surface)
+            {
+                case HitSurface.Water:
+                    return "Crashed into the oasis!";
+                case HitSurface.Prop:
+                    return "Crashed into an obstacle!";
+                case HitSurface.OutOfBounds:
+                    return "Left the play area!";
+                default:
+                    return "Crashed into the sand!";
+            }
+        }
 
         /// <summary>
         /// The debug readout lines, refreshed every READOUTINTERVAL seconds. The HUD still only rebuilds
@@ -620,7 +722,7 @@ namespace GPR202_A3
             _debugText.SetLine(VIEWLINE, $"F1 View: {_debugView}  F2 Lighting: {OnOff(_useLighting)}  " +
                                          $"F3 Culling: {OnOff(_useBackfaceCulling)}  F4 VSync: {OnOff(_useVSync)}",
                 ControlsColor);
-            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  F8 Pop  F9 Crash  F12 Fog: {FogModeName()}  Esc: Quit",
+            _debugText.SetLine(CONTROLSLINE, $"F5 Crater  F6 Water: {OnOff(_useWater)}  F7 Hide debug  F8 Pop  F9 Crash  F12 Fog: {FogModeName()}  Esc/Q: Quit",
                 ControlsColor);
         }
 
@@ -649,7 +751,7 @@ namespace GPR202_A3
         }
 
         /// <summary>
-        /// Uploads the fog settings to every shader that uses them (on load, and when F11 changes the mode).
+        /// Uploads the fog settings to every shader that uses them (on load, and when F12 changes the mode).
         /// </summary>
         private void UploadFog()
         {

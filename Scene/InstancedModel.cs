@@ -1,3 +1,4 @@
+using GPR202_A3.Collision;
 using GPR202_A3.Debugging;
 using GPR202_A3.Graphics;
 using GPR202_A3.Loading;
@@ -22,6 +23,11 @@ namespace GPR202_A3.Scene
         /// Draw calls per frame (one per material).
         /// </summary>
         public int DrawCalls => _parts.Count;
+
+        /// <summary>
+        /// The model's triangles for collision, in its own units (shared by every copy).
+        /// </summary>
+        public CollisionMesh Collision { get; }
         #endregion
 
         #region Private Fields
@@ -39,10 +45,14 @@ namespace GPR202_A3.Scene
         /// <param name="file">The model file, relative to the Resource folder.</param>
         /// <param name="materials">The material for each material name in the file (as named in Blender).</param>
         /// <param name="instances">One model matrix per copy.</param>
-        public InstancedModel(string file, Dictionary<string, Material> materials, List<Matrix4> instances)
+        /// <param name="noCollision">Materials the plane passes through (e.g. the palm's leaves). Null = all are solid.</param>
+        public InstancedModel(string file, Dictionary<string, Material> materials, List<Matrix4> instances,
+            ICollection<string>? noCollision = null)
         {
             InstanceCount = instances.Count;
             _instanceVbo = new VBO(instances);
+
+            var solidMeshes = new List<MeshData>();
 
             foreach (var (materialName, data) in ModelLoader.LoadByMaterial(file))
             {
@@ -52,10 +62,15 @@ namespace GPR202_A3.Scene
                     material = new Material();
                 }
 
+                if (noCollision == null || !noCollision.Contains(materialName))
+                    solidMeshes.Add(data);
+
                 var mesh = new Mesh(data, $"{file} ({materialName})");
                 mesh.LinkInstances(_instanceVbo);
                 _parts.Add((mesh, material));
             }
+
+            Collision = new CollisionMesh(solidMeshes);
         }
         #endregion
 

@@ -1,3 +1,4 @@
+using GPR202_A3.Collision;
 using GPR202_A3.Debugging;
 using GPR202_A3.Generation;
 using GPR202_A3.Graphics;
@@ -44,6 +45,14 @@ namespace GPR202_A3.Scene
         // Leaves: pixels less opaque than this are cut out
         private const float LEAFALPHACUTOFF = 0.5f;
 
+        // Whether the plane crashes into palm leaves. Off, since the leaf quads are bigger than the leaves you see,
+        // so the plane can clip the fronds and only the trunk and crown are solid.
+        // (static readonly instead of const, so the compiler doesn't warn that one branch never runs)
+        private static readonly bool LeavesAreSolid = false;
+
+        // Name of the leaf material in PalmTree.obj
+        private const string LEAFMATERIAL = "Leaf";
+
         // Surface roughness (1 = fully matte)
         private const float BARKROUGHNESS = 0.9f;
         private const float LEAFROUGHNESS = 0.8f;
@@ -54,18 +63,26 @@ namespace GPR202_A3.Scene
         /// <summary>
         /// Total props placed.
         /// </summary>
-        public int InstanceCount { get; }
+        public int InstanceCount { get; private set; }
 
         /// <summary>
         /// Draw calls per frame for every prop.
         /// </summary>
-        public int DrawCalls { get; }
+        public int DrawCalls { get; private set; }
+
+        /// <summary>
+        /// A collider for every placed prop (its real triangles, with a box around it), for the plane to crash into.
+        /// </summary>
+        public IReadOnlyList<PropCollider> Colliders => _colliders;
         #endregion
 
         #region Private Fields
         // GPU resources this class owns, deleted in Delete()
         private readonly List<InstancedModel> _models = new();
         private readonly List<Texture> _textures = new();
+
+        // One collider per prop, made once here since props never move
+        private readonly List<PropCollider> _colliders = new();
         #endregion
 
         #region Constructors
@@ -97,7 +114,7 @@ namespace GPR202_A3.Scene
                     AlbedoMap = LoadTexture("Props/PalmTopColour.png", Material.ALBEDOMAPUNIT),
                     Roughness = BARKROUGHNESS
                 },
-                ["Leaf"] = new Material
+                [LEAFMATERIAL] = new Material
                 {
                     AlbedoMap = LoadTexture("Props/PalmLeaf.png", Material.ALBEDOMAPUNIT),
                     Roughness = LEAFROUGHNESS,
@@ -118,17 +135,14 @@ namespace GPR202_A3.Scene
             rockOnes.AddRange(rimRocks);
 
             // --- Upload ---
-            _models.Add(new InstancedModel("Props/PalmTree.obj", palmMaterials, palms));
-            _models.Add(new InstancedModel("Props/RockOne.obj", rockMaterials, rockOnes));
-            _models.Add(new InstancedModel("Props/RockTwo.obj", rockMaterials, rockTwos));
+            List<string>? palmNoCollision = null;
+            if (!LeavesAreSolid)
+                palmNoCollision = [LEAFMATERIAL];
+            AddModel(new InstancedModel("Props/PalmTree.obj", palmMaterials, palms, palmNoCollision), palms);
+            AddModel(new InstancedModel("Props/RockOne.obj", rockMaterials, rockOnes), rockOnes);
+            AddModel(new InstancedModel("Props/RockTwo.obj", rockMaterials, rockTwos), rockTwos);
 
-            foreach (InstancedModel model in _models)
-            {
-                InstanceCount += model.InstanceCount;
-                DrawCalls += model.DrawCalls;
-            }
-
-            Log.Info($"Props: {palms.Count} palms, {rockOnes.Count + rockTwos.Count} rocks, {DrawCalls} draw calls");
+            Log.Info($"Props: {palms.Count} palms, {rockOnes.Count + rockTwos.Count} rocks, {DrawCalls} draw calls, {_colliders.Count} colliders");
         }
         #endregion
 
@@ -162,6 +176,19 @@ namespace GPR202_A3.Scene
         #endregion
 
         #region Helper Methods
+        /// <summary>
+        /// Keeps a model, adds up its counts, and makes a collider for each copy (the model's triangles, placed with that copy's matrix).
+        /// </summary>
+        private void AddModel(InstancedModel model, List<Matrix4> instances)
+        {
+            _models.Add(model);
+            InstanceCount += model.InstanceCount;
+            DrawCalls += model.DrawCalls;
+
+            foreach (Matrix4 instance in instances)
+                _colliders.Add(new PropCollider(model.Collision, instance));
+        }
+
         /// <summary>
         /// Loads a texture and keeps it so Delete() can free it.
         /// </summary>

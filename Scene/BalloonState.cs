@@ -22,7 +22,6 @@ namespace GPR202_A3.Scene
 
         // The plane collects a balloon within COLLECTRADIUS of its centre.
         // The centre is CENTREHEIGHT above the model's origin (which is at the basket).
-        // These become a proper sphere collider in Step 4.
         private const float COLLECTRADIUS = 15f;
         private const float CENTREHEIGHT = 5f;
 
@@ -97,8 +96,9 @@ namespace GPR202_A3.Scene
         /// Spins the balloon, checks whether the plane has reached it, and plays the collection animation.
         /// </summary>
         /// <param name="planePosition">The plane's position.</param>
+        /// <param name="canCollect">Whether the plane can collect it (not once it has crashed).</param>
         /// <param name="deltaTime">Seconds since the last update.</param>
-        public void Update(Vector3 planePosition, float deltaTime)
+        public void Update(Vector3 planePosition, bool canCollect, float deltaTime)
         {
             if (Finished)
                 return;
@@ -109,7 +109,7 @@ namespace GPR202_A3.Scene
 
                 // Distance to the balloon's centre rather than its base
                 Vector3 centre = Position + new Vector3(0f, CENTREHEIGHT, 0f);
-                if (Vector3.Distance(centre, planePosition) < COLLECTRADIUS)
+                if (canCollect && Vector3.Distance(centre, planePosition) < COLLECTRADIUS)
                     Collected = true;
 
                 return;

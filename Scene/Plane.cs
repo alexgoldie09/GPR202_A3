@@ -1,4 +1,4 @@
-﻿using GPR202_A3.Debugging;
+using GPR202_A3.Debugging;
 using GPR202_A3.Graphics;
 using GPR202_A3.Loading;
 using OpenTK.Mathematics;
@@ -197,6 +197,20 @@ namespace GPR202_A3.Scene
         /// </summary>
         public Vector3 GetWorldDirection(Vector3 modelDirection) => Vector3.Transform(modelDirection, _root.Rotation);
         
+        /// <summary>
+        /// Stops the plane going above a height. It keeps flying forward, just level with the limit.
+        /// </summary>
+        /// <param name="maxHeight">The highest the plane's origin can be (world y).</param>
+        public void ClampHeight(float maxHeight)
+        {
+            Vector3 position = _root.Position;
+            if (position.Y <= maxHeight)
+                return;
+
+            position.Y = maxHeight;
+            _root.Position = position;
+        }
+
         /// <summary>
         /// Moves the plane and levels it out, for a new game.
         /// </summary>
